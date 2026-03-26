@@ -98,6 +98,7 @@ class UserProfile(models.Model):
     avatar = models.ImageField(
         upload_to="avatars/", verbose_name="头像", blank=True, null=True
     )
+    createTime = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
 
     class Meta:
         db_table = "user_profile"

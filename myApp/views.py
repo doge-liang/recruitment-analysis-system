@@ -134,20 +134,13 @@ def index(request):
     ]
 
     salary_dist = []
+    all_jobs = JobInfo.objects.all()
     for label, low, high in salary_ranges:
-        count = (
-            JobInfo.objects.extra(
-                where=[
-                    "CAST(SUBSTR(salary, 1, INSTR(LOWER(salary), 'k') - 1) AS INTEGER) >= ?"
-                ],
-                params=[low],
-            )
-            .filter(salary__icontains="k")
-            .exclude(salary__icontains="k以下")
-            .count()
-            if low > 0
-            else JobInfo.objects.filter(salary__icontains="k以下").count()
-        )
+        count = 0
+        for job in all_jobs:
+            low_sal, high_sal = parse_salary(job.salary)
+            if low <= low_sal < high:
+                count += 1
         salary_dist.append({"label": label, "count": count})
 
     # 最新职位
