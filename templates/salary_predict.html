@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>薪资预测 - 机器学习 - 招聘信息分析系统</title>
+    <script src="/static/js/echarts.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei', Arial, sans-serif; background: #f5f5f5; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 24px; }
+        .header .user-info a { color: white; text-decoration: none; margin-left: 20px; }
+        .container { display: flex; min-height: calc(100vh - 60px); }
+        .sidebar { width: 200px; background: white; padding: 20px 0; }
+        .sidebar ul { list-style: none; }
+        .sidebar li a { display: block; padding: 12px 20px; color: #333; text-decoration: none; }
+        .sidebar li a:hover, .sidebar li a.active { background: #f0f0f0; color: #667eea; }
+        .main-content { flex: 1; padding: 20px; }
+        .predict-card { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 600px; }
+        .predict-card h2 { color: #333; margin-bottom: 20px; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; color: #555; font-weight: bold; }
+        .form-group select, .form-group input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
+        .btn-predict { width: 100%; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+        .btn-predict:hover { opacity: 0.9; }
+        .result { margin-top: 30px; padding: 20px; background: #f9f9f9; border-radius: 10px; text-align: center; display: none; }
+        .result.show { display: block; }
+        .result h3 { color: #667eea; margin-bottom: 10px; }
+        .result .salary { font-size: 36px; color: #e74c3c; font-weight: bold; }
+        .result .unit { font-size: 18px; color: #666; }
+        .info-card { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-top: 20px; }
+        .info-card h3 { color: #333; margin-bottom: 15px; }
+        .info-card p { color: #666; line-height: 1.8; }
+        .chart { height: 300px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>大数据人才招聘分析系统</h1>
+        <div class="user-info">
+            <span>欢迎, {{ request.user.username }}</span>
+            <a href="/myApp/logout/">退出</a>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="sidebar">
+            <ul>
+                <li><a href="/myApp/index/">系统首页</a></li>
+                <li><a href="/myApp/salary/">薪资分析</a></li>
+                <li><a href="/myApp/company/">企业分析</a></li>
+                <li><a href="/myApp/educational/">学历分布</a></li>
+                <li><a href="/myApp/address/">城市分布</a></li>
+                <li><a href="/myApp/joblist/">岗位查询</a></li>
+                <li><a href="/myApp/ml/salary_predict/" class="active">薪资预测</a></li>
+                <li><a href="/myApp/ml/job_recommend/">岗位推荐</a></li>
+            </ul>
+        </div>
+        
+        <div class="main-content">
+            <div class="predict-card">
+                <h2>🎯 薪资预测（随机森林回归模型）</h2>
+                <p style="color:#666;margin-bottom:20px;">基于您的条件，预测大数据岗位的薪资水平</p>
+                
+                <form id="predictForm">
+                    <div class="form-group">
+                        <label>学历要求</label>
+                        <select id="educational" required>
+                            <option value="">请选择学历</option>
+                            <option value="博士">博士</option>
+                            <option value="硕士">硕士</option>
+                            <option value="本科">本科</option>
+                            <option value="大专">大专</option>
+                            <option value="学历不限">学历不限</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>工作经验</label>
+                        <select id="workExperience" required>
+                            <option value="">请选择工作经验</option>
+                            <option value="应届毕业生">应届毕业生</option>
+                            <option value="1年以下">1年以下</option>
+                            <option value="1-3年">1-3年</option>
+                            <option value="3-5年">3-5年</option>
+                            <option value="5-10年">5-10年</option>
+                            <option value="10年以上">10年以上</option>
+                            <option value="经验不限">经验不限</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>公司规模</label>
+                        <select id="companyPeople" required>
+                            <option value="">请选择公司规模</option>
+                            <option value="0-99人">0-99人</option>
+                            <option value="100-499人">100-499人</option>
+                            <option value="500-999人">500-999人</option>
+                            <option value="1000-9999人">1000-9999人</option>
+                            <option value="10000人以上">10000人以上</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>意向城市</label>
+                        <select id="address" required>
+                            <option value="">请选择城市</option>
+                            <option value="北京">北京</option>
+                            <option value="上海">上海</option>
+                            <option value="深圳">深圳</option>
+                            <option value="广州">广州</option>
+                            <option value="杭州">杭州</option>
+                            <option value="成都">成都</option>
+                            <option value="南京">南京</option>
+                            <option value="武汉">武汉</option>
+                            <option value="西安">西安</option>
+                            <option value="苏州">苏州</option>
+                        </select>
+                    </div>
+                    
+                    <button type="submit" class="btn-predict">预测薪资</button>
+                </form>
+                
+                <div class="result" id="result">
+                    <h3>预测薪资</h3>
+                    <div class="salary" id="predictedSalary">--</div>
+                    <div class="unit">K / 月</div>
+                </div>
+            </div>
+            
+            <div class="info-card">
+                <h3>📊 模型说明</h3>
+                <p>本功能使用<strong>随机森林回归算法</strong>（Random Forest Regression）进行薪资预测。</p>
+                <p style="margin-top:10px;">模型基于历史招聘数据训练，学习了不同学历、工作经验、公司规模和城市组合对薪资的影响规律。</p>
+                <p style="margin-top:10px;">预测结果仅供参考，实际薪资可能因公司、个人能力、谈判等因素有所差异。</p>
+                
+                <div id="compareChart" class="chart"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        var compareChart;
+        
+        function initChart() {
+            compareChart = echarts.init(document.getElementById('compareChart'));
+        }
+        
+        document.getElementById('predictForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            var educational = document.getElementById('educational').value;
+            var workExperience = document.getElementById('workExperience').value;
+            var companyPeople = document.getElementById('companyPeople').value;
+            var address = document.getElementById('address').value;
+            
+            fetch('/myApp/api/ml/salary_predict/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    educational: educational,
+                    workExperience: workExperience,
+                    companyPeople: companyPeople,
+                    address: address
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.predicted_salary) {
+                    document.getElementById('predictedSalary').textContent = data.predicted_salary;
+                    document.getElementById('result').classList.add('show');
+                    
+                    // 更新对比图
+                    compareChart.setOption({
+                        title: { text: '各城市平均薪资对比' },
+                        tooltip: { trigger: 'axis' },
+                        xAxis: { type: 'category', data: data.city_comparison.map(d => d.city) },
+                        yAxis: { type: 'value', name: '薪资(K)' },
+                        series: [{
+                            type: 'bar',
+                            data: data.city_comparison.map(d => d.avg_salary),
+                            itemStyle: {
+                                color: function(params) {
+                                    return params.dataIndex === data.city_comparison.findIndex(d => d.city === address) ? '#e74c3c' : '#667eea';
+                                }
+                            }
+                        }]
+                    });
+                }
+            });
+        });
+        
+        initChart();
+    </script>
+</body>
+</html>

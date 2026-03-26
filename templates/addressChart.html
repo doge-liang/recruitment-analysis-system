@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>城市分布 - 招聘信息分析系统</title>
+    <script src="/static/js/echarts.min.js"></script>
+    <script src="/static/js/echarts-wordcloud.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei', Arial, sans-serif; background: #f5f5f5; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 24px; }
+        .header .user-info a { color: white; text-decoration: none; margin-left: 20px; }
+        .container { display: flex; min-height: calc(100vh - 60px); }
+        .sidebar { width: 200px; background: white; padding: 20px 0; }
+        .sidebar ul { list-style: none; }
+        .sidebar li a { display: block; padding: 12px 20px; color: #333; text-decoration: none; }
+        .sidebar li a:hover, .sidebar li a.active { background: #f0f0f0; color: #667eea; }
+        .main-content { flex: 1; padding: 20px; }
+        .filters { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        .charts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+        .chart-card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .chart-card h3 { color: #333; margin-bottom: 15px; font-size: 16px; }
+        .chart { height: 350px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>大数据人才招聘分析系统</h1>
+        <div class="user-info">
+            <a href="/myApp/logout/">退出</a>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="sidebar">
+            <ul>
+                <li><a href="/myApp/index/">系统首页</a></li>
+                <li><a href="/myApp/salary/">薪资分析</a></li>
+                <li><a href="/myApp/company/">企业分析</a></li>
+                <li><a href="/myApp/educational/">学历分布</a></li>
+                <li><a href="/myApp/address/" class="active">城市分布</a></li>
+                <li><a href="/myApp/joblist/">岗位查询</a></li>
+            </ul>
+        </div>
+        
+        <div class="main-content">
+            <div class="filters">
+                <select id="address">
+                    <option value="">城市（全部）</option>
+                </select>
+                <button onclick="loadData()">查询</button>
+            </div>
+            
+            <div class="charts">
+                <div class="chart-card">
+                    <h3>城市岗位分布（饼图）</h3>
+                    <div id="pieChart" class="chart"></div>
+                </div>
+                <div class="chart-card">
+                    <h3>热门城市平均薪资对比</h3>
+                    <div id="barChart" class="chart"></div>
+                </div>
+                <div class="chart-card">
+                    <h3>行政区分布</h3>
+                    <div id="distChart" class="chart"></div>
+                </div>
+                <div class="chart-card">
+                    <h3>城市词云</h3>
+                    <div id="wordCloudChart" class="chart"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        var pieChart, barChart, distChart, wordCloudChart;
+        
+        function initCharts() {
+            pieChart = echarts.init(document.getElementById('pieChart'));
+            barChart = echarts.init(document.getElementById('barChart'));
+            distChart = echarts.init(document.getElementById('distChart'));
+            wordCloudChart = echarts.init(document.getElementById('wordCloudChart'));
+        }
+        
+        function loadData() {
+            var address = document.getElementById('address').value;
+            
+            fetch(`/myApp/api/address/data/?address=${address}`)
+                .then(res => res.json())
+                .then(data => {
+                    // 城市分布饼图
+                    pieChart.setOption({
+                        tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                        series: [{ type: 'pie', radius: '60%', data: data.pie_data }]
+                    });
+                    
+                    // 城市薪资对比柱状图
+                    barChart.setOption({
+                        tooltip: { trigger: 'axis' },
+                        xAxis: { type: 'category', data: data.city_salary_data.map(d => d.city) },
+                        yAxis: { type: 'value', name: '平均薪资(K)' },
+                        series: [{
+                            type: 'bar',
+                            data: data.city_salary_data.map(d => d.avg_salary),
+                            itemStyle: { color: '#667eea' }
+                        }]
+                    });
+                    
+                    // 行政区分布
+                    distChart.setOption({
+                        tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                        series: [{ type: 'pie', radius: ['40%', '70%'], data: data.dist_data }]
+                    });
+                    
+                    // 词云（用城市数据模拟）
+                    var words = data.pie_data.map(d => ({ name: d.name, value: d.value * 10 }));
+                    wordCloudChart.setOption({
+                        series: [{
+                            type: 'wordCloud',
+                            shape: 'circle',
+                            left: 'center',
+                            top: 'center',
+                            width: '90%',
+                            height: '90%',
+                            sizeRange: [12, 50],
+                            textStyle: {
+                                fontFamily: 'Microsoft YaHei',
+                                fontWeight: 'bold',
+                                color: function() {
+                                    return 'rgb(' + [
+                                        Math.round(Math.random() * 200 + 55),
+                                        Math.round(Math.random() * 50 + 55),
+                                        Math.round(Math.random() * 200 + 55)
+                                    ].join(',') + ')';
+                                }
+                            },
+                            data: words
+                        }]
+                    });
+                });
+        }
+        
+        initCharts();
+        loadData();
+        
+        window.addEventListener('resize', function() {
+            pieChart.resize();
+            barChart.resize();
+            distChart.resize();
+            wordCloudChart.resize();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>爬虫管理 - 招聘信息分析系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei', Arial, sans-serif; background: #f5f5f5; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 30px; }
+        .header h1 { font-size: 24px; }
+        .container { max-width: 800px; margin: 30px auto; padding: 0 20px; }
+        .admin-card { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .admin-card h2 { color: #333; margin-bottom: 20px; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; color: #555; font-weight: bold; }
+        .form-group input, .form-group select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 5px; }
+        .btn-crawl { padding: 15px 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+        .btn-crawl:disabled { opacity: 0.6; cursor: not-allowed; }
+        .status { margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px; }
+        .status-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
+        .status-item:last-child { border-bottom: none; }
+        .log { margin-top: 20px; padding: 15px; background: #1e1e1e; color: #0f0; border-radius: 8px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>爬虫管理后台</h1>
+    </div>
+    
+    <div class="container">
+        <div class="admin-card">
+            <h2>🕷️ BOSS直聘数据采集</h2>
+            
+            <form id="crawlForm">
+                <div class="form-group">
+                    <label>搜索关键词</label>
+                    <input type="text" id="keyword" value="大数据" placeholder="请输入搜索关键词">
+                </div>
+                
+                <div class="form-group">
+                    <label>城市</label>
+                    <select id="city">
+                        <option value="">全国</option>
+                        <option value="101280600">深圳</option>
+                        <option value="101210100">杭州</option>
+                        <option value="101230100">合肥</option>
+                        <option value="101270100">成都</option>
+                        <option value="101280100">广州</option>
+                        <option value="101210300">宁波</option>
+                        <option value="101110100">天津</option>
+                        <option value="101190400">苏州</option>
+                        <option value="101030100">重庆</option>
+                        <option value="101200100">武汉</option>
+                        <option value="101250100">长沙</option>
+                        <option value="101270100">成都</option>
+                        <option value="101180100">郑州</option>
+                        <option value="101010100">北京</option>
+                        <option value="101020100">上海</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>爬取页数</label>
+                    <input type="number" id="pages" value="5" min="1" max="20">
+                </div>
+                
+                <button type="submit" class="btn-crawl" id="startBtn">开始采集</button>
+            </form>
+            
+            <div class="status" id="status" style="display:none;">
+                <h3>采集状态</h3>
+                <div class="status-item">
+                    <span>当前状态</span>
+                    <span id="crawlStatus">等待中...</span>
+                </div>
+                <div class="status-item">
+                    <span>已采集记录</span>
+                    <span id="crawledCount">0</span>
+                </div>
+                <div class="status-item">
+                    <span>当前页数</span>
+                    <span id="currentPage">0</span>
+                </div>
+            </div>
+            
+            <div class="log" id="log" style="display:none;"></div>
+        </div>
+    </div>
+    
+    <script>
+        document.getElementById('crawlForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            var btn = document.getElementById('startBtn');
+            btn.disabled = true;
+            btn.textContent = '采集中...';
+            
+            document.getElementById('status').style.display = 'block';
+            document.getElementById('log').style.display = 'block';
+            
+            var logEl = document.getElementById('log');
+            function addLog(msg) {
+                logEl.innerHTML += new Date().toLocaleTimeString() + ' ' + msg + '<br>';
+                logEl.scrollTop = logEl.scrollHeight;
+            }
+            
+            addLog('正在启动爬虫...');
+            
+            fetch('/myApp/admin/crawl/start/', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    addLog('爬虫已启动，请等待采集完成...');
+                    document.getElementById('crawlStatus').textContent = '采集中';
+                    
+                    // 模拟进度更新
+                    var page = 0;
+                    var interval = setInterval(function() {
+                        page++;
+                        document.getElementById('currentPage').textContent = page + '/' + document.getElementById('pages').value;
+                        document.getElementById('crawledCount').textContent = page * 20;
+                        
+                        if (page >= parseInt(document.getElementById('pages').value)) {
+                            clearInterval(interval);
+                            document.getElementById('crawlStatus').textContent = '已完成';
+                            btn.disabled = false;
+                            btn.textContent = '开始采集';
+                            addLog('采集完成！');
+                        }
+                    }, 2000);
+                } else {
+                    addLog('启动失败: ' + data.error);
+                    btn.disabled = false;
+                    btn.textContent = '开始采集';
+                }
+            })
+            .catch(err => {
+                addLog('请求失败: ' + err);
+                btn.disabled = false;
+                btn.textContent = '开始采集';
+            });
+        });
+    </script>
+</body>
+</html>
