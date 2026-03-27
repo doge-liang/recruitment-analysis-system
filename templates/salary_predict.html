@@ -170,37 +170,9 @@
             var companyPeople = document.getElementById('companyPeople').value;
             var address = document.getElementById('address').value;
 
-            const csrfToken = getCookie('csrftoken');
             fetch('/myApp/api/ml/salary_predict/', {
                 method: 'POST',
-                headers: {
-'Content-Type': 'application/json',
-'X-CSRFToken': csrfToken
-                },
-                body: JSON.stringify({
-                    educational: educational,
-                    workExperience: workExperience,
-                    companyPeople: companyPeople,
-                    address: address
-                })
-            })
-        var compareChart;
-        
-        function initChart() {
-            compareChart = echarts.init(document.getElementById('compareChart'));
-        }
-        
-        document.getElementById('predictForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            var educational = document.getElementById('educational').value;
-            var workExperience = document.getElementById('workExperience').value;
-            var companyPeople = document.getElementById('companyPeople').value;
-            var address = document.getElementById('address').value;
-            
-            fetch('/myApp/api/ml/salary_predict/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
                 body: JSON.stringify({
                     educational: educational,
                     workExperience: workExperience,
@@ -213,7 +185,7 @@
                 if (data.predicted_salary) {
                     document.getElementById('predictedSalary').textContent = data.predicted_salary;
                     document.getElementById('result').classList.add('show');
-                    
+
                     // 更新对比图
                     compareChart.setOption({
                         title: { text: '各城市平均薪资对比' },
@@ -233,7 +205,7 @@
                 }
             });
         });
-        
+
         initChart();
     </script>
 </body>

@@ -143,57 +143,39 @@
         var workExperience = document.getElementById('workExperience').value;
         var address = document.getElementById('address').value;
 
-        const csrfToken = getCookie('csrftoken');
         fetch('/myApp/api/ml/job_recommend/', {
             method: 'POST',
-            headers: {
-'Content-Type': 'application/json',
-'X-CSRFToken': csrfToken
-            },
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
             body: JSON.stringify({
                 educational: educational,
                 workExperience: workExperience,
                 address: address
             })
         })
-        document.getElementById('recommendForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            var educational = document.getElementById('educational').value;
-            var workExperience = document.getElementById('workExperience').value;
-            var address = document.getElementById('address').value;
-            
-            fetch('/myApp/api/ml/job_recommend/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    educational: educational,
-                    workExperience: workExperience,
-                    address: address
-                })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.recommendations && data.recommendations.length > 0) {
-                    document.getElementById('emptyState').style.display = 'none';
-                    document.getElementById('jobList').innerHTML = data.recommendations.map(job => `
-                        <div class="job-card">
-                            <div class="job-info">
-                                <h4><a href="/myApp/jobdetail/${job.id}/">${job.title}</a></h4>
-                                <p>${job.companyTitle} | ${job.address} | ${job.educational}</p>
-                            </div>
-                            <div class="job-meta">
-                                <div class="salary">${job.salary}</div>
-                                <div class="match">匹配度: ${job.match_score}分</div>
-                            </div>
+        .then(res => res.json())
+        .then(data => {
+            if (data.recommendations && data.recommendations.length > 0) {
+                document.getElementById('emptyState').style.display = 'none';
+                document.getElementById('jobList').innerHTML = data.recommendations.map(job => `
+                    <div class="job-card">
+                        <div class="job-info">
+                            <h4><a href="/myApp/jobdetail/${job.id}/">${job.title}</a></h4>
+                            <p>${job.companyTitle} | ${job.address} | ${job.educational}</p>
                         </div>
-                    `).join('');
-                } else {
-                    document.getElementById('emptyState').innerHTML = '未找到匹配的岗位';
-                    document.getElementById('emptyState').style.display = 'block';
-                }
-            });
+                        <div class="job-meta">
+                            <div class="salary">${job.salary}</div>
+                            <div class="match">匹配度: ${job.match_score}分</div>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                document.getElementById('emptyState').innerHTML = '未找到匹配的岗位';
+                document.getElementById('emptyState').style.display = 'block';
+            }
         });
+    });
     </script>
+</body>
+</html>
 </body>
 </html>
