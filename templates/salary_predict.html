@@ -142,6 +142,49 @@
     
     <script>
         var compareChart;
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        function initChart() {
+            compareChart = echarts.init(document.getElementById('compareChart'));
+        }
+
+        document.getElementById('predictForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            var educational = document.getElementById('educational').value;
+            var workExperience = document.getElementById('workExperience').value;
+            var companyPeople = document.getElementById('companyPeople').value;
+            var address = document.getElementById('address').value;
+
+            const csrfToken = getCookie('csrftoken');
+            fetch('/myApp/api/ml/salary_predict/', {
+                method: 'POST',
+                headers: {
+'Content-Type': 'application/json',
+'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    educational: educational,
+                    workExperience: workExperience,
+                    companyPeople: companyPeople,
+                    address: address
+                })
+            })
+        var compareChart;
         
         function initChart() {
             compareChart = echarts.init(document.getElementById('compareChart'));

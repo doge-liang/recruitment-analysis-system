@@ -140,8 +140,8 @@ class SalaryPredictor:
         train_score = self.model.score(X_train, y_train)
         test_score = self.model.score(X_test, y_test)
 
-        print(f"训练集 R² 分数: {train_score:.4f}")
-        print(f"测试集 R² 分数: {test_score:.4f}")
+        print(f"训练集 R2 分数: {train_score:.4f}")
+        print(f"测试集 R2 分数: {test_score:.4f}")
 
         # 保存模型
         self.save_model()

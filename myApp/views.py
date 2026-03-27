@@ -15,7 +15,6 @@ from django.db.models import Count, Avg
 from django.db.models.functions import Replace
 from django.http import JsonResponse, HttpResponseRedirect
 from django.shortcuts import render, get_object_or_404
-from django.views.decorators.csrf import csrf_exempt
 
 from .models import JobInfo, History, UserProfile
 
@@ -523,6 +522,7 @@ def salary_predict_view(request):
 
 
 @login_required
+@login_required
 def salary_predict_api(request):
     """薪资预测API"""
     if request.method == "POST":
@@ -533,13 +533,24 @@ def salary_predict_api(request):
         address = data.get("address", "")
 
         # 使用机器学习模型预测
-        from .ml_model.salary_predictor import SalaryPredictor
+        from ml_model.salary_predictor import SalaryPredictor
 
         predictor = SalaryPredictor()
         prediction = predictor.predict(
             [educational, work_experience, company_people, address]
         )
-
+        # 获取各城市平均薪资对比
+        city_salaries = []
+        for city in ["北京", "上海", "深圳", "广州", "杭州"]:
+            city_jobs = JobInfo.objects.filter(address__contains=city)
+            if city_jobs.exists():
+                avg = sum(get_salary_avg(j.salary) for j in city_jobs) / city_jobs.count()
+                city_salaries.append({"city": city, "avg_salary": round(avg, 1)})
+        
+        return JsonResponse({
+            "predicted_salary": prediction,
+            "city_comparison": city_salaries
+        })
         return JsonResponse({"predicted_salary": prediction})
 
     return JsonResponse({"error": "仅支持POST请求"})
@@ -561,7 +572,7 @@ def job_recommend_api(request):
         user_addr = data.get("address", "")
 
         # 使用KNN模型推荐岗位
-        from .ml_model.job_recommender import JobRecommender
+        from ml_model.salary_predictor import JobRecommender
 
         recommender = JobRecommender()
         recommendations = recommender.recommend(user_edu, user_exp, user_addr, top_n=10)
