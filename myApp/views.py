@@ -62,7 +62,7 @@ def login_view(request):
 
         # 使用Django标准认证
         user = authenticate(request, username=username, password=password)
-        
+
         if user is None:
             return render(request, "login.html", {"error": "用户名或密码错误"})
 
@@ -118,7 +118,9 @@ def index(request):
     total_users = User.objects.count()
 
     # 学历分布
-    edu_dist = JobInfo.objects.values("educational").annotate(count=Count("id"))
+    edu_dist = (
+        JobInfo.objects.order_by().values("educational").annotate(count=Count("id"))
+    )
     edu_labels = [item["educational"] for item in edu_dist]
     edu_counts = [item["count"] for item in edu_dist]
 
@@ -256,21 +258,27 @@ def company_data_api(request):
         queryset = queryset.filter(type=job_type)
 
     # 企业性质分布
-    company_natures = queryset.values("companyNature").annotate(count=Count("id"))
+    company_natures = (
+        queryset.order_by().values("companyNature").annotate(count=Count("id"))
+    )
     nature_data = [
         {"name": item["companyNature"] or "未知", "value": item["count"]}
         for item in company_natures
     ]
 
     # 融资状态分布
-    company_status = queryset.values("companyStatus").annotate(count=Count("id"))
+    company_status = (
+        queryset.order_by().values("companyStatus").annotate(count=Count("id"))
+    )
     status_data = [
         {"name": item["companyStatus"] or "未知", "value": item["count"]}
         for item in company_status
     ]
 
     # 公司规模分布
-    company_people = queryset.values("companyPeople").annotate(count=Count("id"))
+    company_people = (
+        queryset.order_by().values("companyPeople").annotate(count=Count("id"))
+    )
     people_data = [
         {"name": item["companyPeople"] or "未知", "value": item["count"]}
         for item in company_people
@@ -278,7 +286,8 @@ def company_data_api(request):
 
     # 行业分布
     industry_dist = (
-        queryset.values("companyNature")
+        queryset.order_by()
+        .values("companyNature")
         .annotate(count=Count("id"))
         .order_by("-count")[:10]
     )
@@ -320,14 +329,16 @@ def educational_data_api(request):
         queryset = queryset.filter(educational=educational)
 
     # 学历分布饼图
-    edu_dist = queryset.values("educational").annotate(count=Count("id"))
+    edu_dist = queryset.order_by().values("educational").annotate(count=Count("id"))
     pie_data = [
         {"name": item["educational"], "value": item["count"]} for item in edu_dist
     ]
 
     # 经验-薪资折线图
-    experience_dist = queryset.values("workExperience").annotate(
-        count=Count("id"), avg_salary=Avg("salary")
+    experience_dist = (
+        queryset.order_by()
+        .values("workExperience")
+        .annotate(count=Count("id"), avg_salary=Avg("salary"))
     )
 
     line_data = []
@@ -390,6 +401,7 @@ def address_data_api(request):
         .exclude(dist="")
         .values("dist")
         .annotate(count=Count("id"))
+        .order_by("-count")
     )
     dist_data = [{"name": item["dist"], "value": item["count"]} for item in dist_dist]
 
@@ -544,13 +556,14 @@ def salary_predict_api(request):
         for city in ["北京", "上海", "深圳", "广州", "杭州"]:
             city_jobs = JobInfo.objects.filter(address__contains=city)
             if city_jobs.exists():
-                avg = sum(get_salary_avg(j.salary) for j in city_jobs) / city_jobs.count()
+                avg = (
+                    sum(get_salary_avg(j.salary) for j in city_jobs) / city_jobs.count()
+                )
                 city_salaries.append({"city": city, "avg_salary": round(avg, 1)})
-        
-        return JsonResponse({
-            "predicted_salary": prediction,
-            "city_comparison": city_salaries
-        })
+
+        return JsonResponse(
+            {"predicted_salary": prediction, "city_comparison": city_salaries}
+        )
         return JsonResponse({"predicted_salary": prediction})
 
     return JsonResponse({"error": "仅支持POST请求"})
