@@ -101,6 +101,15 @@
                         });
                     }
                     
+                    if (data.experiences) {
+                        var expSelect = document.getElementById('workExperience');
+                        data.experiences.forEach(exp => {
+                            if (![...expSelect.options].find(opt => opt.value === exp)) {
+                                expSelect.add(new Option(exp, exp));
+                            }
+                        });
+                    }
+                    
                     // 柱状图
                     barChart.setOption({
                         tooltip: { trigger: 'axis' },
