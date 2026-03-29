@@ -7,6 +7,7 @@ pyecharts>=2.0
 beautifulsoup4>=4.9
 lxml>=4.6
 PyMySQL>=1.0
+mysqlclient>=2.1
 python-docx>=0.8
 matplotlib>=3.4
 wordcloud>=1.8
