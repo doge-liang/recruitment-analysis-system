@@ -317,6 +317,18 @@ def company_data_api(request):
     )
 
 
+@login_required
+def company_filter_options_api(request):
+    """企业分析筛选选项API - 返回岗位类型列表"""
+    job_types = list(
+        JobInfo.objects.values_list("type", flat=True)
+        .exclude(type="")
+        .distinct()
+        .order_by("type")
+    )
+    return JsonResponse({"job_types": job_types})
+
+
 # ==================== 学历分布 ====================
 
 

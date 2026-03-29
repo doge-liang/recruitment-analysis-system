@@ -17,6 +17,11 @@ urlpatterns = [
     # 企业分析
     path("company/", views.company_view, name="company"),
     path("api/company/data/", views.company_data_api, name="company_data_api"),
+    path(
+        "api/company/filter_options/",
+        views.company_filter_options_api,
+        name="company_filter_options_api",
+    ),
     # 学历分布
     path("educational/", views.educational_view, name="educational"),
     path(

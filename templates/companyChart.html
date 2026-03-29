@@ -84,6 +84,20 @@
             peopleChart = echarts.init(document.getElementById('peopleChart'));
             industryChart = echarts.init(document.getElementById('industryChart'));
         }
+
+        function loadFilterOptions() {
+            fetch('/myApp/api/company/filter_options/')
+                .then(res => res.json())
+                .then(data => {
+                    var select = document.getElementById('jobType');
+                    data.job_types.forEach(function(type) {
+                        var opt = document.createElement('option');
+                        opt.value = type;
+                        opt.textContent = type;
+                        select.appendChild(opt);
+                    });
+                });
+        }
         
         function loadData() {
             var jobType = document.getElementById('jobType').value;
@@ -123,6 +137,7 @@
         }
         
         initCharts();
+        loadFilterOptions();
         loadData();
         
         window.addEventListener('resize', function() {
