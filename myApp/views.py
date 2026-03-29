@@ -230,9 +230,17 @@ def salary_data_api(request):
     funnel_data = sorted(bar_data, key=lambda x: x["value"], reverse=True)
 
     # 可选的筛选条件
-    educations = list(JobInfo.objects.values_list("educational", flat=True).distinct())
+    educations = list(
+        JobInfo.objects.values_list("educational", flat=True)
+        .exclude(educational="")
+        .distinct()
+        .order_by("educational")
+    )
     experiences = list(
-        JobInfo.objects.values_list("workExperience", flat=True).distinct()
+        JobInfo.objects.values_list("workExperience", flat=True)
+        .exclude(workExperience="")
+        .distinct()
+        .order_by("workExperience")
     )
 
     return JsonResponse(
