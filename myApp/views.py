@@ -147,6 +147,12 @@ def index(request):
     # 最新职位
     recent_jobs = JobInfo.objects.all()[:10]
 
+    # 最近数据入库日期
+    latest_job = JobInfo.objects.order_by("-createTime").first()
+    latest_job_date = (
+        latest_job.createTime.strftime("%Y-%m-%d") if latest_job else "暂无数据"
+    )
+
     context = {
         "total_jobs": total_jobs,
         "total_users": total_users,
@@ -154,6 +160,7 @@ def index(request):
         "edu_counts": json.dumps(edu_counts),
         "recent_jobs": recent_jobs,
         "username": request.user.username,
+        "latest_job_date": latest_job_date,
     }
     return render(request, "index.html", context)
 
