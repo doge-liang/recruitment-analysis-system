@@ -57,11 +57,19 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "recruitment_system.wsgi.application"
 
-# Database - Using SQLite as requested
+# Database - MySQL for production (Docker)
+# Docker: docker run -d --name recruitment_mysql -e MYSQL_ROOT_PASSWORD=root123456 -e MYSQL_DATABASE=recruitment_db -p 3306:3306 mysql:8.0
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": "recruitment_db",
+        "USER": "root",
+        "PASSWORD": "root123456",
+        "HOST": "localhost",
+        "PORT": "3306",
+        "OPTIONS": {
+            "charset": "utf8mb4",
+        },
     }
 }
 
