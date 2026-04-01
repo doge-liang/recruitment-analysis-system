@@ -94,8 +94,12 @@ class SalaryPredictor:
                 else:
                     # 处理未见过的类别
                     known_classes = set(le.classes_)
+                    # 如果 "未知" 不在 encoder 中，使用第一个已知类别作为默认值
+                    default_value = (
+                        "未知" if "未知" in known_classes else le.classes_[0]
+                    )
                     df[col] = df[col].apply(
-                        lambda x: x if x in known_classes else "未知"
+                        lambda x: x if x in known_classes else default_value
                     )
                     df[col + "_encoded"] = le.transform(df[col])
 
