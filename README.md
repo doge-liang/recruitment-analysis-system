@@ -124,7 +124,20 @@ python manage.py migrate
 python manage.py runserver 0.0.0.0:8000
 ```
 
-### 第十步：访问系统
+### 第十步：训练机器学习模型
+
+首次部署或更新代码后，必须训练薪资预测和岗位推荐模型：
+
+```powershell
+cd ml_model
+python salary_predictor.py
+```
+
+训练完成后会生成：
+- `ml_model/salary_model.pkl` - 薪资预测模型
+- `ml_model/job_recommender.pkl` - 岗位推荐模型
+
+### 第十一步：访问系统
 
 浏览器打开：http://localhost:8000/myApp/login/
 
