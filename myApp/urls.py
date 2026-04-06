@@ -37,6 +37,7 @@ urlpatterns = [
     # 爬虫管理
     path("admin/crawl/", views.crawl_view, name="crawl"),
     path("admin/crawl/start/", views.crawl_start_api, name="crawl_start"),
+    path("admin/crawl/status/", views.crawl_status_api, name="crawl_status"),
     # 机器学习
     path("ml/salary_predict/", views.salary_predict_view, name="salary_predict"),
     path("api/ml/salary_predict/", views.salary_predict_api, name="salary_predict_api"),

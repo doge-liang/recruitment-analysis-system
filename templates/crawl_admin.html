@@ -14,13 +14,17 @@
         .admin-card h2 { color: #333; margin-bottom: 20px; }
         .form-group { margin-bottom: 20px; }
         .form-group label { display: block; margin-bottom: 8px; color: #555; font-weight: bold; }
-        .form-group input, .form-group select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 5px; }
+        .form-group input, .form-group select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
+        .form-group select { cursor: pointer; background-color: white; }
         .btn-crawl { padding: 15px 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
         .btn-crawl:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-query { padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; margin-left: 10px; }
         .status { margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px; }
         .status-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
         .status-item:last-child { border-bottom: none; }
         .log { margin-top: 20px; padding: 15px; background: #1e1e1e; color: #0f0; border-radius: 8px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+        .platform-badge { display: inline-block; padding: 5px 12px; background: #e3f2fd; color: #1976d2; border-radius: 15px; font-size: 14px; margin-bottom: 15px; }
+        .crawler-icon { margin-right: 5px; }
     </style>
 </head>
 <body>
@@ -30,9 +34,19 @@
     
     <div class="container">
         <div class="admin-card">
-            <h2>🕷️ BOSS直聘数据采集</h2>
+            <div class="platform-badge" id="platformBadge">🕷️ 招聘数据采集</div>
+            <h2>选择爬虫脚本</h2>
             
             <form id="crawlForm">
+                <!-- 爬虫脚本选择器 -->
+                <div class="form-group">
+                    <label>选择爬虫平台</label>
+                    <select id="crawlerSelect">
+                        <option value="job51">🕷️ 前程无忧 (51job.com)</option>
+                        <option value="boss">🕷️ Boss直聘 (zhipin.com)</option>
+                    </select>
+                </div>
+                
                 <div class="form-group">
                     <label>搜索关键词</label>
                     <input type="text" id="keyword" value="大数据" placeholder="请输入搜索关键词">
@@ -42,34 +56,39 @@
                     <label>城市</label>
                     <select id="city">
                         <option value="">全国</option>
-                        <option value="101280600">深圳</option>
-                        <option value="101210100">杭州</option>
-                        <option value="101230100">合肥</option>
-                        <option value="101270100">成都</option>
-                        <option value="101280100">广州</option>
-                        <option value="101210300">宁波</option>
-                        <option value="101110100">天津</option>
-                        <option value="101190400">苏州</option>
-                        <option value="101030100">重庆</option>
-                        <option value="101200100">武汉</option>
-                        <option value="101250100">长沙</option>
-                        <option value="101270100">成都</option>
-                        <option value="101180100">郑州</option>
-                        <option value="101010100">北京</option>
-                        <option value="101020100">上海</option>
+                        <option value="北京">北京</option>
+                        <option value="上海">上海</option>
+                        <option value="深圳">深圳</option>
+                        <option value="广州">广州</option>
+                        <option value="杭州">杭州</option>
+                        <option value="成都">成都</option>
+                        <option value="武汉">武汉</option>
+                        <option value="南京">南京</option>
+                        <option value="苏州">苏州</option>
+                        <option value="西安">西安</option>
+                        <option value="重庆">重庆</option>
+                        <option value="天津">天津</option>
+                        <option value="长沙">长沙</option>
+                        <option value="郑州">郑州</option>
+                        <option value="合肥">合肥</option>
                     </select>
                 </div>
                 
                 <div class="form-group">
                     <label>爬取页数</label>
-                    <input type="number" id="pages" value="5" min="1" max="20">
+                    <input type="number" id="pages" value="5" min="1" max="50">
                 </div>
                 
                 <button type="submit" class="btn-crawl" id="startBtn">开始采集</button>
+                <button type="button" class="btn-query" id="queryBtn">查询进度</button>
             </form>
             
             <div class="status" id="status" style="display:none;">
                 <h3>采集状态</h3>
+                <div class="status-item">
+                    <span>爬虫平台</span>
+                    <span id="crawlerPlatform">-</span>
+                </div>
                 <div class="status-item">
                     <span>当前状态</span>
                     <span id="crawlStatus">等待中...</span>
@@ -82,6 +101,10 @@
                     <span>当前页数</span>
                     <span id="currentPage">0</span>
                 </div>
+                <div class="status-item">
+                    <span>保存到数据库</span>
+                    <span id="savedCount">0</span>
+                </div>
             </div>
             
             <div class="log" id="log" style="display:none;"></div>
@@ -89,6 +112,17 @@
     </div>
     
     <script>
+        // 更新平台显示
+        document.getElementById('crawlerSelect').addEventListener('change', function() {
+            var platform = this.value;
+            var badge = document.getElementById('platformBadge');
+            if (platform === 'job51') {
+                badge.textContent = '🕷️ 前程无忧 (51job.com)';
+            } else if (platform === 'boss') {
+                badge.textContent = '🕷️ Boss直聘 (zhipin.com)';
+            }
+        });
+        
         document.getElementById('crawlForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
@@ -105,33 +139,67 @@
                 logEl.scrollTop = logEl.scrollHeight;
             }
             
-            addLog('正在启动爬虫...');
+            var crawler = document.getElementById('crawlerSelect').value;
+            var keyword = document.getElementById('keyword').value;
+            var city = document.getElementById('city').value;
+            var pages = document.getElementById('pages').value;
+            
+            // 显示选择的平台
+            var platformName = crawler === 'job51' ? '前程无忧' : 'Boss直聘';
+            document.getElementById('crawlerPlatform').textContent = platformName;
+            
+            addLog('正在启动 ' + platformName + ' 爬虫...');
+            addLog('关键词: ' + keyword + ', 城市: ' + (city || '全国') + ', 页数: ' + pages);
             
             fetch('/myApp/admin/crawl/start/', {
                 method: 'POST',
-                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+                headers: { 
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    crawler: crawler,
+                    keyword: keyword,
+                    city: city,
+                    pages: parseInt(pages)
+                })
             })
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    addLog('爬虫已启动，请等待采集完成...');
+                    addLog('爬虫已启动: ' + data.message);
                     document.getElementById('crawlStatus').textContent = '采集中';
                     
-                    // 模拟进度更新
-                    var page = 0;
-                    var interval = setInterval(function() {
-                        page++;
-                        document.getElementById('currentPage').textContent = page + '/' + document.getElementById('pages').value;
-                        document.getElementById('crawledCount').textContent = page * 20;
-                        
-                        if (page >= parseInt(document.getElementById('pages').value)) {
-                            clearInterval(interval);
-                            document.getElementById('crawlStatus').textContent = '已完成';
-                            btn.disabled = false;
-                            btn.textContent = '开始采集';
-                            addLog('采集完成！');
-                        }
-                    }, 2000);
+                    // 启动进度查询
+                    var checkInterval = setInterval(function() {
+                        fetch('/myApp/admin/crawl/status/')
+                        .then(res => res.json())
+                        .then(status => {
+                            document.getElementById('currentPage').textContent = status.current_page + '/' + status.total_pages;
+                            document.getElementById('crawledCount').textContent = status.raw_count;
+                            document.getElementById('savedCount').textContent = status.saved_count;
+                            
+                            if (status.logs) {
+                                status.logs.forEach(function(log) {
+                                    addLog(log);
+                                });
+                            }
+                            
+                            if (status.status === 'completed') {
+                                clearInterval(checkInterval);
+                                document.getElementById('crawlStatus').textContent = '已完成';
+                                btn.disabled = false;
+                                btn.textContent = '开始采集';
+                                addLog('采集完成！');
+                            } else if (status.status === 'error') {
+                                clearInterval(checkInterval);
+                                document.getElementById('crawlStatus').textContent = '出错';
+                                btn.disabled = false;
+                                btn.textContent = '开始采集';
+                                addLog('采集出错: ' + status.error);
+                            }
+                        });
+                    }, 3000);
                 } else {
                     addLog('启动失败: ' + data.error);
                     btn.disabled = false;
@@ -142,6 +210,25 @@
                 addLog('请求失败: ' + err);
                 btn.disabled = false;
                 btn.textContent = '开始采集';
+            });
+        });
+        
+        document.getElementById('queryBtn').addEventListener('click', function() {
+            // 立即显示状态区域
+            document.getElementById('status').style.display = 'block';
+            document.getElementById('crawlStatus').textContent = '查询中...';
+            
+            fetch('/myApp/admin/crawl/status/')
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('crawlStatus').textContent = data.status === 'running' ? '采集中' : (data.status === 'completed' ? '已完成' : '等待中');
+                document.getElementById('currentPage').textContent = data.current_page + '/' + data.total_pages;
+                document.getElementById('crawledCount').textContent = data.raw_count;
+                document.getElementById('savedCount').textContent = data.saved_count;
+                if (data.crawler) {
+                    var platformName = data.crawler === 'job51' ? '前程无忧' : 'Boss直聘';
+                    document.getElementById('crawlerPlatform').textContent = platformName;
+                }
             });
         });
     </script>

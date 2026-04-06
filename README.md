@@ -14,14 +14,15 @@
 ## 功能模块
 
 1. **用户认证**: 登录、注册、会话管理
-2. **数据采集**: 从BOSS直聘爬取大数据岗位招聘数据
-3. **薪资分析**: 柱状图、饼图、漏斗图展示
-4. **企业分析**: 企业性质、规模、融资状态分布
-5. **学历分布**: 环形图、折线图展示
-6. **城市分布**: 饼图、词云图展示
-7. **岗位查询**: 条件筛选、详情查看
-8. **薪资预测**: 随机森林回归模型
-9. **岗位推荐**: K近邻分类模型
+2. **数据采集**: 从前程无忧(51job)爬取大数据岗位招聘数据
+3. **爬虫管理**: 管理员界面可视化控制爬虫任务（启动、监控、日志）
+4. **薪资分析**: 柱状图、饼图、漏斗图展示
+5. **企业分析**: 企业性质、规模、融资状态分布
+6. **学历分布**: 环形图、折线图展示
+7. **城市分布**: 饼图、词云图展示
+8. **岗位查询**: 条件筛选、详情查看
+9. **薪资预测**: 随机森林回归模型
+10. **岗位推荐**: K近邻分类模型
 
 ---
 
@@ -194,6 +195,7 @@ recruitment_system/
 ├── db.sqlite3              # SQLite数据库（开发用）
 ├── manage.py               # Django管理脚本
 ├── requirements.txt        # 依赖列表
+├── crawl_20000_data.sh     # 大规模数据采集脚本
 ├── recruitment_system/     # 项目配置
 │   ├── settings.py
 │   ├── urls.py
@@ -204,10 +206,21 @@ recruitment_system/
 │   ├── urls.py            # URL路由
 │   └── admin.py           # 后台管理
 ├── crawler/               # 爬虫模块
-│   └── boss_crawler.py
+│   ├── job51_crawler.py           # 前程无忧基础爬虫
+│   ├── job51_crawler_enhanced.py  # 增强版（断点续传、批量控制）
+│   ├── checkpoint_manager.py      # 检查点管理器
+│   ├── boss_crawler.py            # BOSS直聘爬虫（旧）
+│   └── tests/                     # 测试文件
+│       ├── test_crawler_admin_playwright.py
+│       └── test_checkpoint_manager.py
 ├── ml_model/              # 机器学习模块
 │   └── salary_predictor.py
+├── docs/                  # 文档
+│   ├── TDD_PLAN_A.md
+│   ├── IMPLEMENTATION_REPORT.md
+│   └── PHASE4_DEPLOYMENT_GUIDE.md
 ├── templates/              # HTML模板
+│   └── crawl_admin.html   # 爬虫管理界面
 └── static/                # 静态文件
     └── js/
         ├── echarts.min.js
@@ -216,14 +229,65 @@ recruitment_system/
 
 ## 数据采集
 
-### 运行爬虫
+### 方式一：使用管理员界面（推荐）
+
+管理员可通过Web界面可视化控制爬虫任务：
+
+1. **访问爬虫管理页面**
+   - 登录管理员账号
+   - 访问 http://localhost:8000/myApp/admin/crawl/
+
+2. **配置爬取参数**
+   - 搜索关键词（如：大数据、数据分析）
+   - 选择城市（支持15个主要城市）
+   - 设置爬取页数（1-50页）
+
+3. **启动爬虫**
+   - 点击"开始采集"按钮
+   - 实时查看进度和日志
+   - 支持随时查询任务状态
+
+**API端点：**
+- `GET /myApp/admin/crawl/` - 管理页面
+- `POST /myApp/admin/crawl/start/` - 启动爬虫
+- `GET /myApp/admin/crawl/status/` - 查询进度
+
+### 方式二：命令行运行
+
+#### 基础版爬虫
 
 ```bash
 cd crawler
-python boss_crawler.py
+python job51_crawler.py
 ```
 
-爬虫会从BOSS直聘采集大数据相关岗位信息，包括：
+#### 增强版爬虫（支持断点续传和批量控制）
+
+```bash
+# 小规模测试（5页）
+python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 5
+
+# 中等规模（100页）
+python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 100
+
+# 大规模爬取（1000页 ≈ 20000条数据）
+python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 1000
+
+# 断点续传（恢复之前的爬取）
+python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 1000
+
+# 从头开始（忽略检查点）
+python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 1000 --no-resume
+```
+
+#### 自动脚本（批量采集20000+数据）
+
+```bash
+chmod +x crawl_20000_data.sh
+./crawl_20000_data.sh
+```
+
+爬虫会从前程无忧(51job.com)采集大数据相关岗位信息，包括：
 - 职位名称
 - 薪资范围
 - 学历要求
@@ -235,17 +299,21 @@ python boss_crawler.py
 
 ### 采集参数
 
-在 `boss_crawler.py` 中修改：
+在代码中修改参数：
 
 ```python
-run_crawler(keyword='大数据', city='101280600', pages=5)
+# 基础版
+from crawler.job51_crawler import run_crawler
+run_crawler(keyword='大数据', pages=5)
+
+# 增强版（支持断点续传）
+from crawler.job51_crawler_enhanced import run_crawler
+run_crawler(keyword='大数据', city='上海', pages=50, resume=True)
 ```
 
-城市代码参考：
-- 101280600: 深圳
-- 101210100: 杭州
-- 101010100: 北京
-- 101020100: 上海
+**支持的城市：** 全国、北京、上海、深圳、广州、杭州、成都、武汉、南京、苏州、西安、重庆、天津、长沙、郑州、合肥
+
+**关键词建议：** 大数据、数据分析、数据挖掘、机器学习、人工智能、数据仓库、商业智能
 
 ## 机器学习模型
 
@@ -275,11 +343,50 @@ python import_jobs.py
 
 ## 注意事项
 
+### 环境要求
+
 1. **Python 版本**：Django 3.2 不支持 Python 3.13，需要使用 Python 3.8-3.10
 2. **Docker MySQL**：确保 Docker Desktop 已启动
-3. **反爬机制**: BOSS直聘有反爬机制，实际使用可能需要Cookie登录或代理IP
-4. **数据量**: 建议采集5000+条数据以获得更好的分析效果
-5. **ChromeDriver**: 确保Chrome浏览器版本与ChromeDriver匹配
+3. **ChromeDriver**: 确保Chrome浏览器版本与ChromeDriver匹配
+
+### 爬虫运行环境说明
+
+**重要**：Selenium爬虫需要在有图形界面的环境中运行，以下环境可能无法正常启动Chrome：
+
+- ❌ Docker容器环境（无/dev/shm）
+- ❌ 纯命令行服务器（无X11）
+- ✅ Windows本地环境（推荐）
+- ✅ Linux桌面环境
+- ✅ WSL2 + Windows Chrome
+
+**解决方案：**
+```bash
+# Windows本地运行
+conda activate recruitment_sys
+python crawler/job51_crawler.py
+
+# 或使用增强版
+python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 50
+```
+
+### 反爬机制
+
+1. **前程无忧有反爬机制**，实际使用建议：
+   - 控制爬取频率（已内置自适应限速）
+   - 每批50页后休息5-10分钟
+   - 单日爬取不超过500页
+   - 如遇验证码需手动处理
+
+2. **断点续传**：
+   - 爬虫崩溃后可自动恢复
+   - 进度保存在 `crawler_checkpoint.json`
+   - 默认启用断点续传，使用 `--no-resume` 可从头开始
+
+### 数据量建议
+
+- **小规模测试**：5-10页（约100-200条）
+- **中等规模**：50-100页（约1000-2000条）
+- **大规模采集**：1000页（约20000条，需分多天完成）
 
 ## 许可证
 

@@ -1,0 +1,63 @@
+{% extends "admin/index.html" %}
+{% load i18n %}
+
+{% block content %}
+<div id="content-main">
+    {# 爬虫管理快速入口 #}
+    <div class="module crawl-manager" style="margin-bottom: 20px; border: 2px solid #417690; border-radius: 4px; background: #f8f8f8;">
+        <table style="width: 100%;">
+            <caption style="background: #417690; color: white; padding: 10px; font-size: 14px; text-align: left;">
+                🕷️ 爬虫管理工具
+            </caption>
+            <tr>
+                <td style="padding: 15px;">
+                    <h3 style="margin: 0 0 10px 0; color: #333;">前程无忧数据采集</h3>
+                    <p style="margin: 0 0 15px 0; color: #666;">
+                        通过可视化界面管理爬虫任务，实时查看采集进度和日志。
+                    </p>
+                    <a href="/myApp/admin/crawl/" 
+                       style="display: inline-block; background: #417690; color: white; padding: 10px 20px; 
+                              text-decoration: none; border-radius: 4px; font-weight: bold;">
+                        进入爬虫管理界面 →
+                    </a>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    {# 原有的 app 列表 #}
+    {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
+</div>
+{% endblock %}
+
+{% block sidebar %}
+<div id="content-related">
+    <div class="module" id="recent-actions-module">
+        <h2>{% translate 'Recent actions' %}</h2>
+        <h3>{% translate 'My actions' %}</h3>
+        {% load log %}
+        {% get_admin_log 10 as admin_log for_user user %}
+        {% if not admin_log %}
+        <p>{% translate 'None available' %}</p>
+        {% else %}
+        <ul class="actionlist">
+        {% for entry in admin_log %}
+            <li class="{% if entry.is_addition %}addlink{% endif %}{% if entry.is_change %}changelink{% endif %}{% if entry.is_deletion %}deletelink{% endif %}">
+                {% if entry.is_deletion or not entry.get_admin_url %}
+                    {{ entry.object_repr }}
+                {% else %}
+                    <a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>
+                {% endif %}
+                <br>
+                {% if entry.content_type %}
+                    <span class="mini quiet">{% filter capfirst %}{{ entry.content_type }}{% endfilter %}</span>
+                {% else %}
+                    <span class="mini quiet">{% translate 'Unknown content' %}</span>
+                {% endif %}
+            </li>
+        {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

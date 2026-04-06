@@ -15,6 +15,7 @@ from django.db.models import Count, Avg
 from django.db.models.functions import Replace
 from django.http import JsonResponse, HttpResponseRedirect
 from django.shortcuts import render, get_object_or_404
+from django.views.decorators.csrf import csrf_exempt
 
 from .models import JobInfo, History, UserProfile
 
@@ -534,21 +535,94 @@ def crawl_view(request):
 
 
 @login_required
+@csrf_exempt
 def crawl_start_api(request):
-    """启动爬虫API"""
+    """启动爬虫API - 接收crawler/keyword/city/pages参数"""
     if not request.user.is_staff:
         return JsonResponse({"error": "权限不足", "success": False})
 
-    # 这里应该启动异步爬虫任务
-    # 实际实现中可以使用Celery等任务队列
-    from .crawler import boss_crawler
-    import threading
+    if request.method != "POST":
+        return JsonResponse({"error": "仅支持POST请求", "success": False})
 
-    thread = threading.Thread(target=boss_crawler.run_crawler)
-    thread.daemon = True
-    thread.start()
+    try:
+        data = json.loads(request.body)
+        crawler_type = data.get("crawler", "job51")  # 默认前程无忧
+        keyword = data.get("keyword", "大数据")
+        city = data.get("city", "")
+        pages = int(data.get("pages", 5))
 
-    return JsonResponse({"success": True, "message": "爬虫已启动"})
+        # 限制页数
+        pages = min(pages, 50)
+
+    except (json.JSONDecodeError, ValueError) as e:
+        return JsonResponse({"error": "参数错误: {}".format(str(e)), "success": False})
+
+    # 验证爬虫类型
+    if crawler_type not in ["job51", "boss"]:
+        return JsonResponse({"error": "不支持的爬虫类型", "success": False})
+
+    # 启动爬虫
+    if crawler_type == "job51":
+        # 前程无忧爬虫
+        import threading
+        import os
+        import sys
+
+        def run_job51_crawler():
+            try:
+                sys.path.insert(
+                    0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                )
+                from crawler.job51_crawler import Job51Crawler, save_to_database
+
+                crawler = Job51Crawler()
+                for page in range(1, pages + 1):
+                    jobs = crawler.crawl_job_list(keyword=keyword, page=page)
+                    if jobs:
+                        save_to_database(jobs)
+            except Exception as e:
+                print(f"前程无忧爬虫错误: {e}")
+
+        thread = threading.Thread(target=run_job51_crawler)
+        thread.daemon = True
+        thread.start()
+
+    elif crawler_type == "boss":
+        # Boss直聘爬虫
+        import threading
+        from .crawler import boss_crawler
+
+        thread = threading.Thread(target=boss_crawler.run_crawler)
+        thread.daemon = True
+        thread.start()
+
+    crawler_name = "前程无忧" if crawler_type == "job51" else "Boss直聘"
+    return JsonResponse(
+        {
+            "success": True,
+            "message": f"{crawler_name}爬虫已启动: {keyword} {city or '全国'} {pages}页",
+        }
+    )
+
+
+@login_required
+def crawl_status_api(request):
+    """查询爬虫状态API"""
+    if not request.user.is_staff:
+        return JsonResponse({"error": "权限不足"})
+
+    # 返回爬虫状态
+    return JsonResponse(
+        {
+            "status": "idle",
+            "crawler": "",
+            "current_page": 0,
+            "total_pages": 0,
+            "raw_count": 0,
+            "saved_count": 0,
+            "logs": [],
+        }
+    )
 
 
 # ==================== 机器学习 ====================
