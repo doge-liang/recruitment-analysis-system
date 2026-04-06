@@ -34,7 +34,7 @@
     
     <div class="container">
         <div class="admin-card">
-            <div class="platform-badge" id="platformBadge">🕷️ 招聘数据采集</div>
+            <div class="platform-badge" id="platformBadge">招聘数据采集</div>
             <h2>选择爬虫脚本</h2>
             
             <form id="crawlForm">
@@ -129,7 +129,7 @@
                         data.crawlers.forEach(function(crawler) {
                             var option = document.createElement('option');
                             option.value = crawler.name;
-                            option.textContent = '🕷️ ' + crawler.name + (crawler.description ? ' - ' + crawler.description : '');
+                            option.textContent = '🕷️ ' + crawler.name;
                             select.appendChild(option);
                         });
                         // 触发一次change事件更新badge
@@ -149,9 +149,9 @@
             var crawlerName = this.value;
             var badge = document.getElementById('platformBadge');
             if (crawlerName) {
-                badge.textContent = '🕷️ ' + crawlerName;
+                badge.textContent = crawlerName;
             } else {
-                badge.textContent = '🕷️ 招聘数据采集';
+                badge.textContent = '招聘数据采集';
             }
         });
         
