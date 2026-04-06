@@ -18,6 +18,7 @@ from django.shortcuts import render, get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 
 from .models import JobInfo, History, UserProfile
+from crawler.registry import list_crawlers, get_crawler_module, is_valid_crawler
 
 
 # ==================== 工具函数 ====================
@@ -531,7 +532,17 @@ def crawl_view(request):
     """爬虫管理页面"""
     if not request.user.is_staff:
         return JsonResponse({"error": "权限不足"})
-    return render(request, "crawl_admin.html")
+    return render(request, "crawl_admin.html", {"crawlers": list_crawlers()})
+
+
+@login_required
+def crawl_list_api(request):
+    """获取可用爬虫脚本列表API"""
+    if not request.user.is_staff:
+        return JsonResponse({"error": "权限不足"})
+
+    crawlers = list_crawlers()
+    return JsonResponse({"crawlers": crawlers})
 
 
 @login_required
@@ -546,7 +557,7 @@ def crawl_start_api(request):
 
     try:
         data = json.loads(request.body)
-        crawler_type = data.get("crawler", "job51")  # 默认前程无忧
+        crawler = data.get("crawler", "")
         keyword = data.get("keyword", "大数据")
         city = data.get("city", "")
         pages = int(data.get("pages", 5))
@@ -557,39 +568,33 @@ def crawl_start_api(request):
     except (json.JSONDecodeError, ValueError) as e:
         return JsonResponse({"error": "参数错误: {}".format(str(e)), "success": False})
 
-    # 验证爬虫类型
-    if crawler_type != "job51":
-        return JsonResponse({"error": "不支持的爬虫类型", "success": False})
+    # 验证爬虫脚本
+    if not crawler:
+        return JsonResponse({"error": "缺少crawler参数", "success": False})
 
-    # 启动爬虫
-    # 前程无忧爬虫
+    if not is_valid_crawler(crawler):
+        return JsonResponse(
+            {"error": "无效的爬虫脚本: {}".format(crawler), "success": False}
+        )
+
+    # 获取爬虫模块并启动
     import threading
-    import os
-    import sys
 
-    def run_job51_crawler():
+    def run_crawler_thread():
         try:
-            sys.path.insert(
-                0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            )
-            from crawler.job51_crawler import Job51Crawler, save_to_database
-
-            crawler = Job51Crawler()
-            for page in range(1, pages + 1):
-                jobs = crawler.crawl_job_list(keyword=keyword, page=page)
-                if jobs:
-                    save_to_database(jobs)
+            module = get_crawler_module(crawler)
+            module.run_crawler(keyword=keyword, city=city, pages=pages)
         except Exception as e:
-            print(f"前程无忧爬虫错误: {e}")
+            print(f"爬虫错误: {e}")
 
-    thread = threading.Thread(target=run_job51_crawler)
+    thread = threading.Thread(target=run_crawler_thread)
     thread.daemon = True
     thread.start()
 
     return JsonResponse(
         {
             "success": True,
-            "message": f"前程无忧爬虫已启动: {keyword} {city or '全国'} {pages}页",
+            "message": f"{crawler} 爬虫已启动: {keyword} {city or '全国'} {pages}页",
         }
     )
 

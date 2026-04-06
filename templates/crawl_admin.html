@@ -40,9 +40,9 @@
             <form id="crawlForm">
                 <!-- 爬虫脚本选择器 -->
                 <div class="form-group">
-                    <label>选择爬虫平台</label>
+                    <label>选择爬虫脚本</label>
                     <select id="crawlerSelect">
-                        <option value="job51">🕷️ 前程无忧 (51job.com)</option>
+                        <option value="">加载中...</option>
                     </select>
                 </div>
                 
@@ -111,10 +111,41 @@
     </div>
     
     <script>
+        // 页面加载时获取爬虫列表
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('/myApp/admin/crawl/list/')
+                .then(res => res.json())
+                .then(data => {
+                    var select = document.getElementById('crawlerSelect');
+                    select.innerHTML = '';
+                    if (data.crawlers && data.crawlers.length > 0) {
+                        data.crawlers.forEach(function(crawler) {
+                            var option = document.createElement('option');
+                            option.value = crawler.name;
+                            option.textContent = '🕷️ ' + crawler.name + (crawler.description ? ' - ' + crawler.description : '');
+                            select.appendChild(option);
+                        });
+                        // 触发一次change事件更新badge
+                        select.dispatchEvent(new Event('change'));
+                    } else {
+                        select.innerHTML = '<option value="">暂无可用爬虫脚本</option>';
+                    }
+                })
+                .catch(err => {
+                    console.error('获取爬虫列表失败:', err);
+                    document.getElementById('crawlerSelect').innerHTML = '<option value="">加载失败</option>';
+                });
+        });
+
         // 更新平台显示
         document.getElementById('crawlerSelect').addEventListener('change', function() {
+            var crawlerName = this.value;
             var badge = document.getElementById('platformBadge');
-            badge.textContent = '🕷️ 前程无忧 (51job.com)';
+            if (crawlerName) {
+                badge.textContent = '🕷️ ' + crawlerName;
+            } else {
+                badge.textContent = '🕷️ 招聘数据采集';
+            }
         });
         
         document.getElementById('crawlForm').addEventListener('submit', function(e) {
@@ -133,14 +164,16 @@
                 logEl.scrollTop = logEl.scrollHeight;
             }
             
+            var crawler = document.getElementById('crawlerSelect').value;
             var keyword = document.getElementById('keyword').value;
             var city = document.getElementById('city').value;
             var pages = document.getElementById('pages').value;
             
             // 显示选择的平台
-            document.getElementById('crawlerPlatform').textContent = '前程无忧';
+            var platformName = crawler;
+            document.getElementById('crawlerPlatform').textContent = platformName;
             
-            addLog('正在启动 前程无忧 爬虫...');
+            addLog('正在启动 ' + platformName + ' 爬虫...');
             addLog('关键词: ' + keyword + ', 城市: ' + (city || '全国') + ', 页数: ' + pages);
             
             fetch('/myApp/admin/crawl/start/', {
@@ -150,7 +183,7 @@
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    crawler: 'job51',
+                    crawler: crawler,
                     keyword: keyword,
                     city: city,
                     pages: parseInt(pages)
@@ -218,7 +251,7 @@
                 document.getElementById('crawledCount').textContent = data.raw_count;
                 document.getElementById('savedCount').textContent = data.saved_count;
                 if (data.crawler) {
-                    document.getElementById('crawlerPlatform').textContent = '前程无忧';
+                    document.getElementById('crawlerPlatform').textContent = data.crawler;
                 }
             });
         });

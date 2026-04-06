@@ -36,6 +36,7 @@ urlpatterns = [
     path("api/job/search/", views.job_search_api, name="job_search_api"),
     # 爬虫管理
     path("admin/crawl/", views.crawl_view, name="crawl"),
+    path("admin/crawl/list/", views.crawl_list_api, name="crawl_list"),
     path("admin/crawl/start/", views.crawl_start_api, name="crawl_start"),
     path("admin/crawl/status/", views.crawl_status_api, name="crawl_status"),
     # 机器学习
