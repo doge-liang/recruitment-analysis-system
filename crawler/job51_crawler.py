@@ -1,48 +1,57 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-前程无忧爬虫模块 - 增强版
+前程无忧爬虫模块
 集成断点续传、批量控制、自适应限速功能
 用于大规模数据爬取（20000+记录）
 """
 
-import os
-import re
-import time
-import random
 import json
+import os
+import random
+import re
+import sys
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 # Django settings
 import django
-import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "recruitment_system.settings")
 django.setup()
 
-from myApp.models import JobInfo
 from django.db import transaction
 from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.action_chains import ActionChains
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+from webdriver_manager.chrome import ChromeDriverManager
+
+from myApp.models import JobInfo
 
 # 导入检查点管理器
+# 确保 crawler 目录在 Python 路径中
+_crawler_dir = Path(__file__).resolve().parent
+if str(_crawler_dir) not in sys.path:
+    sys.path.insert(0, str(_crawler_dir))
+
 try:
-    from .checkpoint_manager import (
-        CheckpointManager,
+    from checkpoint_manager import (
         BatchCalculator,
         BatchStateManager,
+        CheckpointManager,
     )
-except ImportError:
-    from checkpoint_manager import CheckpointManager, BatchCalculator, BatchStateManager
+except ImportError as e:
+    print(f"[错误] 无法导入 checkpoint_manager: {e}")
+    print(f"[调试] Python path: {sys.path}")
+    print(f"[调试] 当前文件: {__file__}")
+    raise
 
 
 class AdaptiveRateLimiter:
@@ -96,7 +105,7 @@ class AdaptiveRateLimiter:
 
 class Job51Crawler:
     """
-    前程无忧爬虫类 - 增强版
+    前程无忧爬虫类
 
     新特性:
     - 断点续传: 崩溃后可恢复
@@ -543,7 +552,7 @@ class Job51Crawler:
                 print(f"[断点续传] 继续爬取 {len(remaining_pages)} 个剩余页面")
 
         print("=" * 70)
-        print("前程无忧爬虫启动 - 增强版")
+        print("前程无忧爬虫启动")
         print("=" * 70)
         print(f"\n配置:")
         print(f"  - 关键词: {keyword}")
@@ -750,7 +759,7 @@ if __name__ == "__main__":
     # 命令行接口
     import argparse
 
-    parser = argparse.ArgumentParser(description="前程无忧爬虫 - 增强版")
+    parser = argparse.ArgumentParser(description="前程无忧爬虫")
     parser.add_argument("--keyword", default="大数据", help="搜索关键词")
     parser.add_argument("--city", default="", help="城市")
     parser.add_argument("--pages", type=int, default=5, help="爬取页数")
