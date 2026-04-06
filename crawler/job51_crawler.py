@@ -370,6 +370,11 @@ class Job51Crawler:
         """
         爬取职位列表
 
+        【分页验证机制】
+        - 记录每页第一条职位ID
+        - 如果连续两页第一条ID相同，说明分页未生效
+        - 记录current_url验证页面是否真的跳转
+
         Returns:
             List[Dict]: 职位信息列表
         """
@@ -381,11 +386,23 @@ class Job51Crawler:
             driver = self.create_driver()
             wait = WebDriverWait(driver, 15)
 
-            # 构建URL
+            # 构建URL（尝试多种分页参数格式）
+            urls_to_try = [
+                f"{self.base_url}?keyword={keyword}",  # 第一页基础URL
+                f"{self.base_url}?keyword={keyword}&page={page}",  # page参数
+                f"{self.base_url}?keyword={keyword}&p={page}",  # p参数
+                f"{self.base_url}?keyword={keyword}&pn={page}",  # pn参数
+                f"{self.base_url}?keyword={keyword}&pageNo={page}",  # pageNo参数
+                f"{self.base_url}?keyword={keyword}&start={(page - 1) * 20}",  # offset参数（假设每页20条）
+            ]
+
+            # 第1页用第一个URL，其他页尝试所有变体
             if page == 1:
-                url = f"{self.base_url}?keyword={keyword}"
+                url = urls_to_try[0]
             else:
-                url = f"{self.base_url}?keyword={keyword}&page={page}"
+                # 尝试第一个URL，如果后续验证发现分页未生效，需要手动翻页
+                url = urls_to_try[1]  # 默认使用 &page=
+                self._log(f"  [分页诊断] 尝试URL: {url}", level="debug")
 
             self._log(f"  访问: {url}")
             driver.get(url)
@@ -403,6 +420,27 @@ class Job51Crawler:
             if "we.51job.com" not in current_url:
                 self._log(f"  [警告] 页面被重定向！可能遇到反爬验证", level="warning")
                 return []
+
+            # 【分页验证】检查URL中的page参数是否被保留或修改
+            import urllib.parse
+
+            parsed_url = urllib.parse.urlparse(current_url)
+            query_params = urllib.parse.parse_qs(parsed_url.query)
+
+            if page > 1:
+                if "page" in query_params:
+                    actual_page = query_params["page"][0]
+                    if actual_page != str(page):
+                        self._log(
+                            f"  [警告] URL参数被修改！期望page={page}, 实际page={actual_page}",
+                            level="warning",
+                        )
+                else:
+                    self._log(
+                        f"  [警告] URL中缺少page参数！可能页面使用了其他分页机制",
+                        level="warning",
+                    )
+                    self._log(f"  [建议] 尝试通过点击分页按钮进行翻页", level="warning")
 
             # 滚动页面以加载所有内容
             for _ in range(3):
@@ -429,6 +467,8 @@ class Job51Crawler:
             self._log(f"  找到 {len(job_cards)} 个职位卡片")
 
             jobs = []
+            first_job_signature = None  # 用于分页验证
+
             for i, card in enumerate(job_cards):
                 try:
                     job_info = {}
@@ -439,6 +479,33 @@ class Job51Crawler:
                         job_info["title"] = title_elem.text.strip()
                     except:
                         job_info["title"] = ""
+
+                    # 【分页验证】记录第一条职位的签名（标题+公司）
+                    if i == 0 and job_info["title"]:
+                        try:
+                            company_elem = card.find_element(By.CLASS_NAME, "cname")
+                            company_name = company_elem.text.strip()
+                            first_job_signature = f"{job_info['title']}_{company_name}"
+                            self._log(
+                                f"  [分页诊断] 本页第一条职位: {first_job_signature}",
+                                level="debug",
+                            )
+
+                            # 检查是否与上一页重复
+                            if (
+                                hasattr(self, "_last_page_first_job")
+                                and self._last_page_first_job == first_job_signature
+                            ):
+                                self._log(
+                                    f"  [错误] 分页未生效！本页内容与上一页完全相同",
+                                    level="error",
+                                )
+                                self._log(
+                                    f"  [建议] 网站可能使用AJAX分页，需要模拟点击分页按钮",
+                                    level="warning",
+                                )
+                        except:
+                            pass
 
                     # 薪资
                     try:
@@ -530,6 +597,20 @@ class Job51Crawler:
                     self._log(f"  解析第 {i + 1} 个职位卡片时出错: {e}", level="error")
                     continue
 
+            # 保存本页第一条职位的签名，用于下一页验证
+            if first_job_signature:
+                self._last_page_first_job = first_job_signature
+
+            # 【分页诊断总结】
+            if page > 1 and jobs:
+                self._log(
+                    f"  [分页诊断] 第{page}页获取到 {len(jobs)} 条数据", level="debug"
+                )
+                self._log(
+                    f"  [分页诊断] URL参数: page={query_params.get('page', ['N/A'])[0]}",
+                    level="debug",
+                )
+
             # 报告成功
             if jobs:
                 self.rate_limiter.report_success()
@@ -540,6 +621,721 @@ class Job51Crawler:
 
         except Exception as e:
             self._log(f"  爬取页面时出错: {e}", level="error")
+            self.rate_limiter.report_failure()
+            return []
+
+        finally:
+            if driver:
+                driver.quit()
+
+    def crawl_job_list_with_click_pagination(
+        self, driver, keyword: str, target_page: int
+    ) -> List[Dict]:
+        """
+        【备选方案】使用点击分页按钮的方式进行翻页
+
+        当URL参数分页失效时使用此方法。它会：
+        1. 首先访问第一页
+        2. 点击分页按钮跳转到目标页
+        3. 等待页面内容更新
+
+        Args:
+            driver: Selenium WebDriver实例（已打开第一页）
+            keyword: 搜索关键词
+            target_page: 目标页码
+
+        Returns:
+            List[Dict]: 职位信息列表
+        """
+        wait = WebDriverWait(driver, 15)
+
+        if target_page == 1:
+            # 第一页无需翻页
+            self._log("  当前已在第1页")
+        else:
+            self._log(f"  [点击翻页] 正在点击分页按钮跳转到第{target_page}页...")
+
+            try:
+                # 方法1: 尝试找到并点击具体的页码按钮
+                # 常见的分页按钮选择器（包括 Element UI）
+                pagination_selectors = [
+                    f'//ul[contains(@class,"el-pager")]//li[contains(@class,"number")][text()="{target_page}"]',  # Element UI
+                    f'//div[contains(@class,"el-pagination")]//li[contains(@class,"number")][text()="{target_page}"]',  # Element UI 2
+                    f'//div[contains(@class,"page")]//a[text()="{target_page}"]',  # 通用分页
+                    f'//div[contains(@class,"pagination")]//a[text()="{target_page}"]',
+                    f'//a[@data-page="{target_page}"]',
+                    f'//button[@data-page="{target_page}"]',
+                    f'//li[contains(@class,"page")]//a[text()="{target_page}"]',
+                ]
+
+                page_clicked = False
+                for selector in pagination_selectors:
+                    try:
+                        page_button = driver.find_element(By.XPATH, selector)
+                        # 滚动到按钮可见
+                        driver.execute_script(
+                            "arguments[0].scrollIntoView({block: 'center'});",
+                            page_button,
+                        )
+                        time.sleep(0.5)
+
+                        # 【Element UI特殊处理】检查是否是当前已选中的页码
+                        button_class = page_button.get_attribute("class") or ""
+                        if "active" in button_class:
+                            self._log(f"  [点击翻页] 目标页 {target_page} 已是当前页")
+                            page_clicked = True
+                            break
+
+                        # 点击前记录第一条职位信息
+                        first_job_before = None
+                        try:
+                            first_card = driver.find_element(
+                                By.CLASS_NAME, "joblist-item-job"
+                            )
+                            title_elem = first_card.find_element(By.CLASS_NAME, "jname")
+                            company_elem = first_card.find_element(
+                                By.CLASS_NAME, "cname"
+                            )
+                            first_job_before = (
+                                f"{title_elem.text.strip()}_{company_elem.text.strip()}"
+                            )
+                        except:
+                            pass
+
+                        page_button.click()
+                        page_clicked = True
+                        self._log(f"  [点击翻页] 成功点击页码按钮: {selector}")
+
+                        # 【关键】等待AJAX数据加载完成
+                        self._log(f"  [点击翻页] 等待AJAX数据加载...")
+                        time.sleep(random.uniform(2, 3))
+
+                        # 【验证1】检查当前页码高亮是否更新
+                        try:
+                            # Element UI 当前页码有 .active 类
+                            active_page_elem = driver.find_element(
+                                By.XPATH,
+                                '//ul[contains(@class,"el-pager")]//li[contains(@class,"active")]',
+                            )
+                            active_page = active_page_elem.text.strip()
+                            if active_page == str(target_page):
+                                self._log(
+                                    f"  [点击翻页] ✅ 页码高亮验证通过: 当前第{active_page}页"
+                                )
+                            else:
+                                self._log(
+                                    f"  [点击翻页] ⚠️ 页码高亮验证失败: 显示第{active_page}页，期望第{target_page}页",
+                                    level="warning",
+                                )
+                        except:
+                            self._log(f"  [点击翻页] 无法验证页码高亮", level="debug")
+
+                        # 【验证2】检查职位列表是否更新
+                        try:
+                            if first_job_before:
+                                # 重新获取第一条职位
+                                time.sleep(1)  # 等待DOM更新
+                                first_card_after = driver.find_element(
+                                    By.CLASS_NAME, "joblist-item-job"
+                                )
+                                title_elem_after = first_card_after.find_element(
+                                    By.CLASS_NAME, "jname"
+                                )
+                                company_elem_after = first_card_after.find_element(
+                                    By.CLASS_NAME, "cname"
+                                )
+                                first_job_after = f"{title_elem_after.text.strip()}_{company_elem_after.text.strip()}"
+
+                                if first_job_before == first_job_after:
+                                    self._log(
+                                        f"  [点击翻页] ⚠️ 数据未更新警告: 第一条职位与点击前相同",
+                                        level="warning",
+                                    )
+                                    self._log(
+                                        f"  [点击翻页] 点击前: {first_job_before}",
+                                        level="debug",
+                                    )
+                                    self._log(
+                                        f"  [点击翻页] 点击后: {first_job_after}",
+                                        level="debug",
+                                    )
+                                else:
+                                    self._log(
+                                        f"  [点击翻页] ✅ 数据已更新", level="debug"
+                                    )
+                        except Exception as e:
+                            self._log(f"  [点击翻页] 数据验证出错: {e}", level="debug")
+
+                        break
+                    except:
+                        continue
+
+                # 方法2: 如果没找到具体页码，尝试点击"下一页"按钮多次
+                if not page_clicked and target_page > 1:
+                    self._log(f"  [点击翻页] 未找到页码按钮，尝试点击'下一页'按钮...")
+                    next_button_selectors = [
+                        '//a[contains(text(),"下一页")]',
+                        '//a[contains(@class,"next")]',
+                        '//button[contains(text(),"下一页")]',
+                        '//li[contains(@class,"next")]//a',
+                        '//span[contains(text(),"下一页")]/parent::a',
+                    ]
+
+                    for i in range(target_page - 1):  # 需要点击 (target_page - 1) 次
+                        clicked = False
+                        for selector in next_button_selectors:
+                            try:
+                                next_button = driver.find_element(By.XPATH, selector)
+                                # 检查是否禁用
+                                disabled = (
+                                    next_button.get_attribute("disabled")
+                                    or "disabled" in next_button.get_attribute("class")
+                                    or "class"
+                                    in str(next_button.get_attribute("class")).lower()
+                                )
+                                if disabled:
+                                    self._log(
+                                        f"  [点击翻页] '下一页'按钮已禁用，可能已到达最后一页"
+                                    )
+                                    break
+
+                                driver.execute_script(
+                                    "arguments[0].scrollIntoView({block: 'center'});",
+                                    next_button,
+                                )
+                                time.sleep(0.5)
+                                next_button.click()
+                                clicked = True
+                                self._log(
+                                    f"  [点击翻页] 点击'下一页' ({i + 1}/{target_page - 1})"
+                                )
+
+                                # 等待页面加载
+                                time.sleep(random.uniform(2, 3))
+
+                                # 等待职位列表更新
+                                try:
+                                    wait.until(
+                                        EC.presence_of_element_located(
+                                            (By.CLASS_NAME, "joblist-item-job")
+                                        )
+                                    )
+                                except:
+                                    pass
+                                break
+                            except:
+                                continue
+
+                        if not clicked:
+                            self._log(
+                                f"  [警告] 无法点击'下一页'按钮，可能已到达最后一页或被反爬",
+                                level="warning",
+                            )
+                            break
+
+                # 方法3: 如果是小页数，尝试输入框跳转
+                if not page_clicked and target_page <= 10:
+                    try:
+                        # 查找页码输入框
+                        input_selectors = [
+                            '//input[@type="text"][contains(@class,"page")]',
+                            '//input[@placeholder="页码"]',
+                            '//input[contains(@class,"pagination")]',
+                        ]
+
+                        for selector in input_selectors:
+                            try:
+                                page_input = driver.find_element(By.XPATH, selector)
+                                page_input.clear()
+                                page_input.send_keys(str(target_page))
+
+                                # 查找并点击确认/跳转按钮
+                                confirm_selectors = [
+                                    '//button[contains(text(),"确定")]',
+                                    '//button[contains(text(),"跳转")]',
+                                    '//a[contains(text(),"GO")]',
+                                    '//input[@type="submit"]',
+                                ]
+
+                                for confirm_selector in confirm_selectors:
+                                    try:
+                                        confirm_btn = driver.find_element(
+                                            By.XPATH, confirm_selector
+                                        )
+                                        confirm_btn.click()
+                                        page_clicked = True
+                                        self._log(
+                                            f"  [点击翻页] 通过输入框跳转到第{target_page}页"
+                                        )
+                                        break
+                                    except:
+                                        continue
+
+                                if page_clicked:
+                                    break
+                            except:
+                                continue
+                    except:
+                        pass
+
+                # 等待页面内容更新
+                if page_clicked:
+                    self._log(f"  [点击翻页] 等待第{target_page}页内容加载...")
+                    time.sleep(random.uniform(3, 5))
+
+                    # 滚动加载
+                    for _ in range(3):
+                        driver.execute_script("window.scrollBy(0, 400)")
+                        time.sleep(0.5)
+
+                    # 验证当前页码是否已更新
+                    try:
+                        # 查找当前页码的高亮元素（包含 Element UI）
+                        current_page_selectors = [
+                            '//ul[contains(@class,"el-pager")]//li[contains(@class,"active")]',  # Element UI
+                            '//div[contains(@class,"el-pagination")]//li[contains(@class,"active")]',  # Element UI 2
+                            '//div[contains(@class,"page")]//a[contains(@class,"active") or contains(@class,"current") or contains(@class,"selected")]',
+                            '//div[contains(@class,"pagination")]//a[contains(@class,"active") or contains(@class,"current")]',
+                            '//li[contains(@class,"active")]//a',
+                        ]
+
+                        for selector in current_page_selectors:
+                            try:
+                                current_page_elem = driver.find_element(
+                                    By.XPATH, selector
+                                )
+                                current_page_text = current_page_elem.text.strip()
+                                if current_page_text == str(target_page):
+                                    self._log(
+                                        f"  [点击翻页] ✅ 验证成功，当前页码显示为第{target_page}页"
+                                    )
+                                else:
+                                    self._log(
+                                        f"  [点击翻页] ⚠️ 当前页码显示为第{current_page_text}页，与目标{target_page}页不符",
+                                        level="warning",
+                                    )
+                                break
+                            except:
+                                continue
+                    except:
+                        pass
+                else:
+                    self._log(
+                        f"  [警告] 无法找到分页按钮，可能需要检查页面结构",
+                        level="warning",
+                    )
+
+            except Exception as e:
+                self._log(f"  [点击翻页] 翻页过程中出错: {e}", level="error")
+
+    def crawl_page_with_click_pagination(
+        self, keyword: str, target_page: int, headless: bool = True
+    ) -> List[Dict]:
+        """
+        【点击翻页方案】爬取单页职位列表
+
+        使用点击分页按钮的方式翻页，当URL参数分页失效时使用。
+        这种方法更接近真实用户行为，能有效绕过反爬。
+
+        Args:
+            keyword: 搜索关键词
+            target_page: 目标页码
+            headless: 是否使用无头模式
+
+        Returns:
+            List[Dict]: 职位信息列表
+        """
+        driver = None
+        try:
+            driver = self.create_driver()
+            wait = WebDriverWait(driver, 15)
+
+            # 首先访问第一页
+            url = f"{self.base_url}?keyword={keyword}"
+            self._log(f"  [点击翻页] 访问第一页: {url}")
+            driver.get(url)
+
+            # 等待页面加载
+            time.sleep(random.uniform(3, 5))
+
+            # 检查是否被重定向
+            current_url = driver.current_url
+            if "we.51job.com" not in current_url:
+                self._log(f"  [警告] 页面被重定向！可能遇到反爬验证", level="warning")
+                return []
+
+            # 如果目标不是第一页，执行翻页
+            if target_page > 1:
+                self._log(f"  [点击翻页] 准备点击翻页到第{target_page}页...")
+                self.crawl_job_list_with_click_pagination(driver, keyword, target_page)
+
+            # 滚动加载内容
+            for _ in range(3):
+                driver.execute_script("window.scrollBy(0, 400)")
+                time.sleep(0.5)
+
+            # 获取职位卡片（复用原有的解析逻辑）
+            try:
+                job_cards = wait.until(
+                    EC.presence_of_all_elements_located(
+                        (By.CLASS_NAME, "joblist-item-job")
+                    )
+                )
+            except:
+                try:
+                    job_cards = driver.find_elements(
+                        By.CSS_SELECTOR, "[class*='joblist-item']"
+                    )
+                except:
+                    self._log("  [点击翻页] 未找到职位卡片")
+                    return []
+
+            self._log(f"  [点击翻页] 找到 {len(job_cards)} 个职位卡片")
+
+            # 解析职位信息（简化版）
+            jobs = []
+            for i, card in enumerate(job_cards):
+                try:
+                    job_info = {}
+
+                    # 职位名称
+                    try:
+                        title_elem = card.find_element(By.CLASS_NAME, "jname")
+                        job_info["title"] = title_elem.text.strip()
+                    except:
+                        job_info["title"] = ""
+
+                    # 薪资
+                    try:
+                        salary_elem = card.find_element(By.CLASS_NAME, "sal")
+                        salary_text = salary_elem.text.strip()
+                        job_info["salary"], job_info["salaryMonth"] = self.parse_salary(
+                            salary_text
+                        )
+                    except:
+                        job_info["salary"] = "薪资面议"
+                        job_info["salaryMonth"] = "12薪"
+
+                    # 公司名称
+                    try:
+                        company_elem = card.find_element(By.CLASS_NAME, "cname")
+                        job_info["companyTitle"] = company_elem.text.strip()
+                    except:
+                        job_info["companyTitle"] = ""
+
+                    # 工作地点
+                    try:
+                        location_elem = card.find_element(By.CLASS_NAME, "area")
+                        job_info["address"] = location_elem.text.strip()
+                    except:
+                        job_info["address"] = ""
+
+                    # 公司信息
+                    try:
+                        company_info_elems = card.find_elements(By.CLASS_NAME, "dc")
+                        info_text = " | ".join(
+                            [
+                                elem.text.strip()
+                                for elem in company_info_elems[:3]
+                                if elem.text.strip()
+                            ]
+                        )
+                        (
+                            job_info["companyNature"],
+                            job_info["companyPeople"],
+                            job_info["companyStatus"],
+                        ) = self.parse_company_info(info_text)
+                    except:
+                        job_info["companyNature"] = "未知"
+                        job_info["companyPeople"] = "未知"
+                        job_info["companyStatus"] = "未知"
+
+                    # 职位标签
+                    try:
+                        tags_elem = card.find_element(
+                            By.CLASS_NAME, "joblist-item-tags"
+                        )
+                        tags_text = tags_elem.text.strip()
+                        job_info["workTag"] = tags_text
+                        job_info["educational"], job_info["workExperience"] = (
+                            self.parse_education_and_experience(tags_text)
+                        )
+                    except:
+                        job_info["workTag"] = ""
+                        job_info["educational"] = "学历不限"
+                        job_info["workExperience"] = "经验不限"
+
+                    # 岗位类型
+                    job_info["type"] = keyword
+                    job_info["pratice"] = "实习" in job_info.get(
+                        "title", ""
+                    ) or "实习" in job_info.get("workTag", "")
+
+                    # 详情链接
+                    try:
+                        link_elem = card.find_element(By.TAG_NAME, "a")
+                        job_info["detailUrl"] = link_elem.get_attribute("href")
+                    except:
+                        job_info["detailUrl"] = ""
+
+                    # 其他字段
+                    job_info["companyTags"] = ""
+                    job_info["hrWork"] = ""
+                    job_info["hrName"] = ""
+                    job_info["companyAvatar"] = ""
+                    job_info["companyUrl"] = ""
+                    job_info["dist"] = ""
+
+                    jobs.append(job_info)
+
+                except Exception as e:
+                    self._log(
+                        f"  [点击翻页] 解析第 {i + 1} 个职位卡片时出错: {e}",
+                        level="error",
+                    )
+                    continue
+
+            if jobs:
+                self.rate_limiter.report_success()
+            else:
+                self.rate_limiter.report_failure()
+
+            return jobs
+
+        except Exception as e:
+            self._log(f"  [点击翻页] 爬取页面时出错: {e}", level="error")
+            self.rate_limiter.report_failure()
+            return []
+
+        finally:
+            if driver:
+                driver.quit()
+
+    def crawl_with_infinite_scroll(
+        self,
+        keyword: str = "大数据",
+        target_count: int = 100,
+        max_scroll_attempts: int = 50,
+    ) -> List[Dict]:
+        """
+        【无限滚动方案】爬取职位列表
+
+        51job使用无限滚动而非传统分页。此方法通过持续滚动页面
+        触发加载更多职位，直到获取足够数据或没有新内容。
+
+        Args:
+            keyword: 搜索关键词
+            target_count: 目标爬取数量
+            max_scroll_attempts: 最大滚动尝试次数（防止无限循环）
+
+        Returns:
+            List[Dict]: 职位信息列表
+        """
+        driver = None
+        try:
+            self.rate_limiter.wait()
+
+            driver = self.create_driver()
+            wait = WebDriverWait(driver, 15)
+
+            # 访问搜索页面
+            url = f"{self.base_url}?keyword={keyword}"
+            self._log(f"  [无限滚动] 访问: {url}")
+            driver.get(url)
+
+            # 等待初始页面加载
+            time.sleep(random.uniform(3, 5))
+
+            # 检查是否被重定向
+            current_url = driver.current_url
+            if "we.51job.com" not in current_url:
+                self._log(f"  [警告] 页面被重定向！可能遇到反爬验证", level="warning")
+                return []
+
+            self._log(f"  [无限滚动] 开始滚动加载，目标: {target_count} 条")
+
+            all_jobs = []
+            seen_job_signatures = set()  # 用于去重
+            last_job_count = 0
+            no_new_count = 0  # 连续无新数据的次数
+
+            for scroll_attempt in range(max_scroll_attempts):
+                # 滚动到底部
+                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                self._log(f"  [无限滚动] 第 {scroll_attempt + 1} 次滚动", level="debug")
+
+                # 等待加载
+                time.sleep(random.uniform(2, 3))
+
+                # 获取当前所有职位卡片
+                try:
+                    job_cards = driver.find_elements(By.CLASS_NAME, "joblist-item-job")
+                except:
+                    try:
+                        job_cards = driver.find_elements(
+                            By.CSS_SELECTOR, "[class*='joblist-item']"
+                        )
+                    except:
+                        job_cards = []
+
+                current_job_count = len(job_cards)
+                self._log(
+                    f"  [无限滚动] 当前页面有 {current_job_count} 个职位卡片",
+                    level="debug",
+                )
+
+                # 检查是否有新数据
+                if current_job_count == last_job_count:
+                    no_new_count += 1
+                    if no_new_count >= 3:
+                        self._log(
+                            f"  [无限滚动] 连续 {no_new_count} 次无新数据，可能已到达底部"
+                        )
+                        break
+                else:
+                    no_new_count = 0
+
+                last_job_count = current_job_count
+
+                # 解析新增的职位
+                new_jobs_count = 0
+                for i, card in enumerate(job_cards):
+                    try:
+                        # 获取职位签名用于去重
+                        try:
+                            title_elem = card.find_element(By.CLASS_NAME, "jname")
+                            title = title_elem.text.strip()
+                            company_elem = card.find_element(By.CLASS_NAME, "cname")
+                            company = company_elem.text.strip()
+                            job_signature = f"{title}_{company}"
+                        except:
+                            continue
+
+                        # 跳过已解析的职位
+                        if job_signature in seen_job_signatures:
+                            continue
+
+                        seen_job_signatures.add(job_signature)
+
+                        # 解析职位详情
+                        job_info = {"title": title, "companyTitle": company}
+
+                        # 薪资
+                        try:
+                            salary_elem = card.find_element(By.CLASS_NAME, "sal")
+                            salary_text = salary_elem.text.strip()
+                            job_info["salary"], job_info["salaryMonth"] = (
+                                self.parse_salary(salary_text)
+                            )
+                        except:
+                            job_info["salary"] = "薪资面议"
+                            job_info["salaryMonth"] = "12薪"
+
+                        # 工作地点
+                        try:
+                            location_elem = card.find_element(By.CLASS_NAME, "area")
+                            job_info["address"] = location_elem.text.strip()
+                        except:
+                            job_info["address"] = ""
+
+                        # 公司信息
+                        try:
+                            company_info_elems = card.find_elements(By.CLASS_NAME, "dc")
+                            info_text = " | ".join(
+                                [
+                                    elem.text.strip()
+                                    for elem in company_info_elems[:3]
+                                    if elem.text.strip()
+                                ]
+                            )
+                            (
+                                job_info["companyNature"],
+                                job_info["companyPeople"],
+                                job_info["companyStatus"],
+                            ) = self.parse_company_info(info_text)
+                        except:
+                            job_info["companyNature"] = "未知"
+                            job_info["companyPeople"] = "未知"
+                            job_info["companyStatus"] = "未知"
+
+                        # 职位标签
+                        try:
+                            tags_elem = card.find_element(
+                                By.CLASS_NAME, "joblist-item-tags"
+                            )
+                            tags_text = tags_elem.text.strip()
+                            job_info["workTag"] = tags_text
+                            job_info["educational"], job_info["workExperience"] = (
+                                self.parse_education_and_experience(tags_text)
+                            )
+                        except:
+                            job_info["workTag"] = ""
+                            job_info["educational"] = "学历不限"
+                            job_info["workExperience"] = "经验不限"
+
+                        # 岗位类型
+                        job_info["type"] = keyword
+                        job_info["pratice"] = "实习" in job_info.get(
+                            "title", ""
+                        ) or "实习" in job_info.get("workTag", "")
+
+                        # 详情链接
+                        try:
+                            link_elem = card.find_element(By.TAG_NAME, "a")
+                            job_info["detailUrl"] = link_elem.get_attribute("href")
+                        except:
+                            job_info["detailUrl"] = ""
+
+                        # 其他字段
+                        job_info["companyTags"] = ""
+                        job_info["hrWork"] = ""
+                        job_info["hrName"] = ""
+                        job_info["companyAvatar"] = ""
+                        job_info["companyUrl"] = ""
+                        job_info["dist"] = ""
+
+                        all_jobs.append(job_info)
+                        new_jobs_count += 1
+
+                        # 检查是否达到目标
+                        if len(all_jobs) >= target_count:
+                            self._log(
+                                f"  [无限滚动] 已达到目标数量 {target_count}，停止滚动"
+                            )
+                            break
+
+                    except Exception as e:
+                        self._log(
+                            f"  [无限滚动] 解析第 {i + 1} 个职位时出错: {e}",
+                            level="error",
+                        )
+                        continue
+
+                self._log(
+                    f"  [无限滚动] 本次解析 {new_jobs_count} 条新数据，累计 {len(all_jobs)} 条"
+                )
+
+                # 达到目标数量则退出
+                if len(all_jobs) >= target_count:
+                    break
+
+                # 如果连续多次没有新数据，提前退出
+                if no_new_count >= 3:
+                    break
+
+            self._log(
+                f"  [无限滚动] 完成，共获取 {len(all_jobs)} 条数据（滚动 {scroll_attempt + 1} 次）"
+            )
+
+            if all_jobs:
+                self.rate_limiter.report_success()
+            else:
+                self.rate_limiter.report_failure()
+
+            return all_jobs
+
+        except Exception as e:
+            self._log(f"  [无限滚动] 爬取时出错: {e}", level="error")
             self.rate_limiter.report_failure()
             return []
 
@@ -707,24 +1503,6 @@ class Job51Crawler:
                         self._log(f"  等待 {delay:.1f} 秒后翻页...")
                         time.sleep(delay)
 
-                # 批次完成，保存到数据库
-                if batch_jobs:
-                    self._log(f"\n[批次 {batch_num}] 保存数据到数据库...")
-                    saved, skipped = self.save_to_database(batch_jobs)
-                    self.stats["records_saved"] += saved
-                    self._log(f"  保存成功: {saved} 条 | 跳过重复: {skipped} 条")
-                    # 更新保存数量
-                    self._update_status(saved_count=self.stats["records_saved"])
-
-                # 批次间休息（除最后一批）
-                if batch_num < batch_calc.total_batches:
-                    rest_time = random.uniform(300, 600)  # 5-10分钟
-                    self._log(
-                        f"\n[休息] 批次 {batch_num} 完成，休息 {rest_time / 60:.1f} 分钟..."
-                    )
-                    self._log(f"[进度] {batch_calc.get_progress(batch_num):.1f}% 完成")
-                    time.sleep(rest_time)
-
         except KeyboardInterrupt:
             self._log("\n\n[!] 用户中断爬虫")
             self._log("[断点续传] 进度已保存，下次运行将自动恢复")
@@ -743,6 +1521,464 @@ class Job51Crawler:
                     self._log(f"\n[收尾] 保存剩余 {len(remaining_jobs)} 条数据...")
                     saved, skipped = self.save_to_database(remaining_jobs)
                     self.stats["records_saved"] += saved
+
+        return self._get_final_stats()
+
+    def run_crawler_with_click_pagination(
+        self,
+        keyword: str = "大数据",
+        city: str = "",
+        pages: int = 5,
+        resume: bool = True,
+    ) -> Dict:
+        """
+        【Element UI点击翻页方案】运行爬虫（支持断点续传）
+
+        使用点击分页按钮的方式翻页，适用于 Element UI 分页组件。
+        在同一个浏览器实例中连续点击分页，提高效率。
+
+        Args:
+            keyword: 搜索关键词
+            city: 城市
+            pages: 爬取页数
+            resume: 是否尝试恢复之前的进度
+
+        Returns:
+            Dict: 统计信息
+        """
+        self.stats["start_time"] = time.time()
+
+        # 尝试恢复检查点
+        checkpoint = None
+        if resume:
+            checkpoint = self.checkpoint_manager.load_checkpoint()
+            if checkpoint:
+                self._log(f"[断点续传] 发现之前的进度: 第{checkpoint.current_page}页")
+                self._log(f"[断点续传] 已完成页面: {len(checkpoint.completed_pages)}页")
+
+                # 使用检查点的参数
+                keyword = checkpoint.keyword
+                city = checkpoint.city
+
+                # 获取剩余页面
+                remaining_pages = self.checkpoint_manager.get_remaining_pages(1, pages)
+                if not remaining_pages:
+                    self._log("[断点续传] 所有页面已完成！")
+                    return self._get_final_stats()
+
+                self._log(f"[断点续传] 继续爬取 {len(remaining_pages)} 个剩余页面")
+
+        self._log("=" * 70)
+        self._log("前程无忧爬虫启动 [Element UI 点击翻页方案]")
+        self._log("=" * 70)
+        self._log(f"\n配置:")
+        self._log(f"  - 关键词: {keyword}")
+        self._log(f"  - 城市: {city or '全国'}")
+        self._log(f"  - 页数: {pages}")
+        self._log(f"  - 断点续传: {'已启用' if resume else '已禁用'}")
+        self._log(f"  - 时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+        # 标记为运行中
+        self._update_status(
+            status="running", keyword=keyword, city=city, total_pages=pages
+        )
+
+        all_jobs = []
+        driver = None
+
+        try:
+            # 创建 driver 实例（只创建一次）
+            driver = self.create_driver()
+            wait = WebDriverWait(driver, 15)
+
+            # 访问第一页
+            url = f"{self.base_url}?keyword={keyword}"
+            self._log(f"[初始化] 访问第一页: {url}")
+            driver.get(url)
+
+            # 等待初始页面加载
+            time.sleep(random.uniform(3, 5))
+
+            # 检查是否被重定向
+            current_url = driver.current_url
+            if "we.51job.com" not in current_url:
+                self._log(f"[错误] 页面被重定向！可能遇到反爬验证", level="error")
+                return self._get_final_stats()
+
+            self._log(f"[初始化] 页面加载完成")
+
+            # 连续爬取多页
+            for page in range(1, pages + 1):
+                # 如果是恢复模式，检查该页是否已完成
+                if (
+                    resume
+                    and checkpoint
+                    and self.checkpoint_manager.is_page_completed(page)
+                ):
+                    self._log(f"\n[跳过] 第 {page} 页已完成")
+                    # 如果不是最后一页，点击下一页
+                    if page < pages:
+                        self._click_next_page(driver, page + 1)
+                    continue
+
+                self._log(f"\n{'=' * 70}")
+                self._log(f"[页面 {page}/{pages}] 正在爬取...")
+                self._log(f"{'=' * 70}")
+
+                # 如果不是第一页，点击分页按钮
+                if page > 1:
+                    success = self._click_next_page(driver, page)
+                    if not success:
+                        self._log(
+                            f"[错误] 无法翻页到第 {page} 页，停止爬取", level="error"
+                        )
+                        break
+
+                # 滚动加载内容
+                for _ in range(3):
+                    driver.execute_script("window.scrollBy(0, 400)")
+                    time.sleep(0.5)
+
+                # 解析当前页职位
+                jobs = self._parse_current_page(driver, wait, keyword)
+
+                if jobs:
+                    all_jobs.extend(jobs)
+                    self.stats["pages_processed"] += 1
+                    self.stats["records_collected"] += len(jobs)
+                    self._log(f"[页面 {page}] 成功获取 {len(jobs)} 条职位信息")
+                    self._log(f"[累计] 总计: {len(all_jobs)} 条")
+
+                    # 更新进度状态
+                    self._update_status(
+                        current_page=page, raw_count=self.stats["records_collected"]
+                    )
+
+                    # 保存到数据库（每页保存，避免数据丢失）
+                    saved, skipped = self.save_to_database(jobs)
+                    self.stats["records_saved"] += saved
+                    self._log(f"[保存] 保存成功: {saved} 条 | 跳过重复: {skipped} 条")
+                    self._update_status(saved_count=self.stats["records_saved"])
+                else:
+                    self._log(f"[页面 {page}] 无数据或出错", level="warning")
+                    self.stats["errors"] += 1
+                    self._update_status(
+                        current_page=page, error_count=self.stats["errors"]
+                    )
+
+                # 保存检查点
+                self.checkpoint_manager.save_checkpoint(
+                    keyword=keyword,
+                    city=city,
+                    current_page=page,
+                    total_pages=pages,
+                    records_collected=self.stats["records_collected"],
+                )
+
+                # 页面间延时（最后页不需要）
+                if page < pages:
+                    delay = random.uniform(4, 7)
+                    self._log(f"[延时] 等待 {delay:.1f} 秒后翻页...")
+                    time.sleep(delay)
+
+        except KeyboardInterrupt:
+            self._log("\n\n[!] 用户中断爬虫")
+            self._log("[断点续传] 进度已保存，下次运行将自动恢复")
+            self._mark_error("用户中断")
+
+        except Exception as e:
+            self._log(f"\n\n[!] 爬虫异常: {e}")
+            import traceback
+
+            self._log(traceback.format_exc(), level="error")
+            self._log("[断点续传] 进度已保存，下次运行将自动恢复")
+            self._mark_error(str(e))
+
+        finally:
+            if driver:
+                driver.quit()
+
+        return self._get_final_stats()
+
+    def _click_next_page(self, driver, target_page: int) -> bool:
+        """
+        点击分页按钮翻页
+
+        Args:
+            driver: Selenium WebDriver 实例
+            target_page: 目标页码
+
+        Returns:
+            bool: 是否成功翻页
+        """
+        self._log(f"[点击翻页] 正在点击分页按钮跳转到第{target_page}页...")
+
+        try:
+            # Element UI 分页选择器
+            pagination_selectors = [
+                f'//ul[contains(@class,"el-pager")]//li[contains(@class,"number")][text()="{target_page}"]',
+                f'//div[contains(@class,"el-pagination")]//li[contains(@class,"number")][text()="{target_page}"]',
+            ]
+
+            # 尝试点击具体页码
+            for selector in pagination_selectors:
+                try:
+                    page_button = driver.find_element(By.XPATH, selector)
+
+                    # 检查是否已是当前页
+                    button_class = page_button.get_attribute("class") or ""
+                    if "active" in button_class:
+                        self._log(f"[点击翻页] 目标页 {target_page} 已是当前页")
+                        return True
+
+                    # 滚动到按钮可见
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({block: 'center'});",
+                        page_button,
+                    )
+                    time.sleep(0.5)
+
+                    # 点击前记录第一条职位
+                    first_job_before = self._get_first_job_signature(driver)
+
+                    # 点击按钮
+                    page_button.click()
+                    self._log(f"[点击翻页] 成功点击页码按钮")
+
+                    # 等待 AJAX 加载
+                    self._log(f"[点击翻页] 等待AJAX数据加载...")
+                    time.sleep(random.uniform(2, 3))
+
+                    # 验证页码高亮
+                    try:
+                        active_page_elem = driver.find_element(
+                            By.XPATH,
+                            '//ul[contains(@class,"el-pager")]//li[contains(@class,"active")]',
+                        )
+                        active_page = active_page_elem.text.strip()
+                        if active_page == str(target_page):
+                            self._log(
+                                f"[点击翻页] ✅ 页码高亮验证通过: 当前第{active_page}页"
+                            )
+                        else:
+                            self._log(
+                                f"[点击翻页] ⚠️ 页码显示为第{active_page}页，期望第{target_page}页",
+                                level="warning",
+                            )
+                    except:
+                        pass
+
+                    # 验证数据是否更新
+                    if first_job_before:
+                        time.sleep(1)
+                        first_job_after = self._get_first_job_signature(driver)
+                        if first_job_before == first_job_after:
+                            self._log(f"[点击翻页] ⚠️ 数据未更新警告", level="warning")
+                        else:
+                            self._log(f"[点击翻页] ✅ 数据已更新", level="debug")
+
+                    return True
+
+                except:
+                    continue
+
+            # 如果没找到具体页码，尝试点击"下一页"
+            self._log(f"[点击翻页] 未找到页码按钮，尝试点击'下一页'...")
+            next_button_selectors = [
+                '//ul[contains(@class,"el-pager")]//li[contains(@class,"btn-next")]',
+                '//button[contains(@class,"btn-next")]',
+            ]
+
+            for selector in next_button_selectors:
+                try:
+                    next_button = driver.find_element(By.XPATH, selector)
+
+                    # 检查是否禁用
+                    button_class = next_button.get_attribute("class") or ""
+                    if "disabled" in button_class:
+                        self._log(f"[点击翻页] '下一页'按钮已禁用，可能已到达最后一页")
+                        return False
+
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({block: 'center'});",
+                        next_button,
+                    )
+                    time.sleep(0.5)
+                    next_button.click()
+                    self._log(f"[点击翻页] 成功点击'下一页'按钮")
+
+                    time.sleep(random.uniform(2, 3))
+                    return True
+
+                except:
+                    continue
+
+            self._log(f"[点击翻页] 无法找到分页按钮", level="error")
+            return False
+
+        except Exception as e:
+            self._log(f"[点击翻页] 翻页过程中出错: {e}", level="error")
+            return False
+
+    def _get_first_job_signature(self, driver) -> str:
+        """
+        获取第一条职位的签名（用于验证数据是否更新）
+
+        Args:
+            driver: Selenium WebDriver 实例
+
+        Returns:
+            str: 职位签名（标题_公司）
+        """
+        try:
+            first_card = driver.find_element(By.CLASS_NAME, "joblist-item-job")
+            title_elem = first_card.find_element(By.CLASS_NAME, "jname")
+            company_elem = first_card.find_element(By.CLASS_NAME, "cname")
+            return f"{title_elem.text.strip()}_{company_elem.text.strip()}"
+        except:
+            return ""
+
+    def _parse_current_page(self, driver, wait, keyword: str) -> List[Dict]:
+        """
+        解析当前页面的职位列表
+
+        Args:
+            driver: Selenium WebDriver 实例
+            wait: WebDriverWait 实例
+            keyword: 搜索关键词
+
+        Returns:
+            List[Dict]: 职位信息列表
+        """
+        try:
+            # 获取职位卡片
+            try:
+                job_cards = wait.until(
+                    EC.presence_of_all_elements_located(
+                        (By.CLASS_NAME, "joblist-item-job")
+                    )
+                )
+            except:
+                job_cards = driver.find_elements(
+                    By.CSS_SELECTOR, "[class*='joblist-item']"
+                )
+
+            if not job_cards:
+                self._log("  未找到职位卡片", level="warning")
+                return []
+
+            self._log(f"  找到 {len(job_cards)} 个职位卡片")
+
+            jobs = []
+            for i, card in enumerate(job_cards):
+                try:
+                    job_info = {}
+
+                    # 职位名称
+                    try:
+                        title_elem = card.find_element(By.CLASS_NAME, "jname")
+                        job_info["title"] = title_elem.text.strip()
+                    except:
+                        job_info["title"] = ""
+
+                    # 薪资
+                    try:
+                        salary_elem = card.find_element(By.CLASS_NAME, "sal")
+                        salary_text = salary_elem.text.strip()
+                        job_info["salary"], job_info["salaryMonth"] = self.parse_salary(
+                            salary_text
+                        )
+                    except:
+                        job_info["salary"] = "薪资面议"
+                        job_info["salaryMonth"] = "12薪"
+
+                    # 公司名称
+                    try:
+                        company_elem = card.find_element(By.CLASS_NAME, "cname")
+                        job_info["companyTitle"] = company_elem.text.strip()
+                    except:
+                        job_info["companyTitle"] = ""
+
+                    # 工作地点
+                    try:
+                        location_elem = card.find_element(By.CLASS_NAME, "area")
+                        job_info["address"] = location_elem.text.strip()
+                    except:
+                        job_info["address"] = ""
+
+                    # 公司信息
+                    try:
+                        company_info_elems = card.find_elements(By.CLASS_NAME, "dc")
+                        info_text = " | ".join(
+                            [
+                                elem.text.strip()
+                                for elem in company_info_elems[:3]
+                                if elem.text.strip()
+                            ]
+                        )
+                        (
+                            job_info["companyNature"],
+                            job_info["companyPeople"],
+                            job_info["companyStatus"],
+                        ) = self.parse_company_info(info_text)
+                    except:
+                        job_info["companyNature"] = "未知"
+                        job_info["companyPeople"] = "未知"
+                        job_info["companyStatus"] = "未知"
+
+                    # 职位标签
+                    try:
+                        tags_elem = card.find_element(
+                            By.CLASS_NAME, "joblist-item-tags"
+                        )
+                        tags_text = tags_elem.text.strip()
+                        job_info["workTag"] = tags_text
+                        job_info["educational"], job_info["workExperience"] = (
+                            self.parse_education_and_experience(tags_text)
+                        )
+                    except:
+                        job_info["workTag"] = ""
+                        job_info["educational"] = "学历不限"
+                        job_info["workExperience"] = "经验不限"
+
+                    # 岗位类型和其他字段
+                    job_info["type"] = keyword
+                    job_info["pratice"] = "实习" in job_info.get(
+                        "title", ""
+                    ) or "实习" in job_info.get("workTag", "")
+
+                    # 详情链接
+                    try:
+                        link_elem = card.find_element(By.TAG_NAME, "a")
+                        job_info["detailUrl"] = link_elem.get_attribute("href")
+                    except:
+                        job_info["detailUrl"] = ""
+
+                    # 其他字段
+                    job_info["companyTags"] = ""
+                    job_info["hrWork"] = ""
+                    job_info["hrName"] = ""
+                    job_info["companyAvatar"] = ""
+                    job_info["companyUrl"] = ""
+                    job_info["dist"] = ""
+
+                    jobs.append(job_info)
+
+                except Exception as e:
+                    self._log(f"  解析第 {i + 1} 个职位卡片时出错: {e}", level="error")
+                    continue
+
+            if jobs:
+                self.rate_limiter.report_success()
+            else:
+                self.rate_limiter.report_failure()
+
+            return jobs
+
+        except Exception as e:
+            self._log(f"  解析页面时出错: {e}", level="error")
+            self.rate_limiter.report_failure()
+            return []
 
         return self._get_final_stats()
 

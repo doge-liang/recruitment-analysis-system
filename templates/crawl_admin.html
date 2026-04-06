@@ -290,7 +290,15 @@
             fetch(url)
             .then(res => res.json())
             .then(data => {
-                document.getElementById('crawlStatus').textContent = data.status === 'running' ? '采集中' : (data.status === 'completed' ? '已完成' : '等待中');
+                var statusText = '等待中';
+                if (data.status === 'running') {
+                    statusText = '采集中';
+                } else if (data.status === 'completed') {
+                    statusText = '已完成';
+                } else if (data.status === 'error') {
+                    statusText = '出错';
+                }
+                document.getElementById('crawlStatus').textContent = statusText;
                 document.getElementById('currentPage').textContent = data.current_page + '/' + data.total_pages;
                 document.getElementById('crawledCount').textContent = data.raw_count;
                 document.getElementById('savedCount').textContent = data.saved_count;

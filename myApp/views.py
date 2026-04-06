@@ -705,7 +705,6 @@ def salary_predict_view(request):
 
 
 @login_required
-@login_required
 def salary_predict_api(request):
     """薪资预测API"""
     if request.method == "POST":
