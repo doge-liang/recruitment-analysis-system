@@ -109,13 +109,14 @@ class Job51Crawler:
         self,
         checkpoint_file: str = "crawler_checkpoint.json",
         batch_state_file: str = "batch_state.json",
+        headless: bool = True,
     ):
         self.base_url = "https://we.51job.com/pc/search"
         self.data = []
         self.chrome_options = Options()
 
         # 反检测设置
-        self._setup_anti_detection()
+        self._setup_anti_detection(headless=headless)
 
         # 检查点管理
         self.checkpoint_manager = CheckpointManager(checkpoint_file)
@@ -134,8 +135,12 @@ class Job51Crawler:
             "last_page_time": None,
         }
 
-    def _setup_anti_detection(self):
-        """配置反检测选项"""
+    def _setup_anti_detection(self, headless=True):
+        """配置反检测选项
+
+        Args:
+            headless: 是否使用无头模式（默认True）。设为False可显示浏览器窗口用于调试
+        """
         self.chrome_options.add_argument(
             "--disable-blink-features=AutomationControlled"
         )
@@ -143,13 +148,26 @@ class Job51Crawler:
             "excludeSwitches", ["enable-automation"]
         )
         self.chrome_options.add_experimental_option("useAutomationExtension", False)
-        self.chrome_options.add_argument("--headless")
+
+        # 控制是否显示浏览器窗口
+        if headless:
+            self.chrome_options.add_argument("--headless")
+
         self.chrome_options.add_argument("--no-sandbox")
         self.chrome_options.add_argument("--disable-dev-shm-usage")
         self.chrome_options.add_argument("--disable-gpu")
         self.chrome_options.add_argument("--window-size=1920,1080")
+
+        # 额外的反检测参数
+        self.chrome_options.add_argument("--disable-blink-features")
+        self.chrome_options.add_argument("--disable-web-security")
         self.chrome_options.add_argument(
-            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            "--disable-features=IsolateOrigins,site-per-process"
+        )
+        self.chrome_options.add_argument("--allow-running-insecure-content")
+
+        self.chrome_options.add_argument(
+            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
 
     def create_driver(self):
@@ -296,6 +314,17 @@ class Job51Crawler:
 
             # 等待页面加载
             time.sleep(random.uniform(3, 5))
+
+            # 【调试输出】显示当前页面信息
+            current_url = driver.current_url
+            page_title = driver.title
+            print(f"  [调试] 当前URL: {current_url}")
+            print(f"  [调试] 页面标题: {page_title}")
+
+            # 如果URL发生变化，可能被重定向到验证页面
+            if "we.51job.com" not in current_url:
+                print(f"  [警告] 页面被重定向！可能遇到反爬验证")
+                return []
 
             # 滚动页面以加载所有内容
             for _ in range(3):
@@ -693,6 +722,7 @@ def run_crawler(
     city: str = "",
     pages: int = 5,
     resume: bool = True,
+    headless: bool = True,
 ) -> Dict:
     """
     运行爬虫主函数（便捷接口）
@@ -702,11 +732,12 @@ def run_crawler(
         city: 城市
         pages: 爬取页数
         resume: 是否启用断点续传
+        headless: 是否使用无头模式（默认True）。设为False显示浏览器窗口用于调试
 
     Returns:
         Dict: 爬取统计信息
     """
-    crawler = Job51Crawler()
+    crawler = Job51Crawler(headless=headless)
     return crawler.run_crawler_with_checkpoint(
         keyword=keyword,
         city=city,
@@ -724,6 +755,11 @@ if __name__ == "__main__":
     parser.add_argument("--city", default="", help="城市")
     parser.add_argument("--pages", type=int, default=5, help="爬取页数")
     parser.add_argument("--no-resume", action="store_true", help="禁用断点续传")
+    parser.add_argument(
+        "--show-browser",
+        action="store_true",
+        help="显示浏览器窗口（用于调试，可观察是否被反爬拦截）",
+    )
 
     args = parser.parse_args()
 
@@ -732,4 +768,5 @@ if __name__ == "__main__":
         city=args.city,
         pages=args.pages,
         resume=not args.no_resume,
+        headless=not args.show_browser,
     )
