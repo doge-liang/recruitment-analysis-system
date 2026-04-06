@@ -558,49 +558,38 @@ def crawl_start_api(request):
         return JsonResponse({"error": "参数错误: {}".format(str(e)), "success": False})
 
     # 验证爬虫类型
-    if crawler_type not in ["job51", "boss"]:
+    if crawler_type != "job51":
         return JsonResponse({"error": "不支持的爬虫类型", "success": False})
 
     # 启动爬虫
-    if crawler_type == "job51":
-        # 前程无忧爬虫
-        import threading
-        import os
-        import sys
+    # 前程无忧爬虫
+    import threading
+    import os
+    import sys
 
-        def run_job51_crawler():
-            try:
-                sys.path.insert(
-                    0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                )
-                from crawler.job51_crawler import Job51Crawler, save_to_database
+    def run_job51_crawler():
+        try:
+            sys.path.insert(
+                0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            )
+            from crawler.job51_crawler import Job51Crawler, save_to_database
 
-                crawler = Job51Crawler()
-                for page in range(1, pages + 1):
-                    jobs = crawler.crawl_job_list(keyword=keyword, page=page)
-                    if jobs:
-                        save_to_database(jobs)
-            except Exception as e:
-                print(f"前程无忧爬虫错误: {e}")
+            crawler = Job51Crawler()
+            for page in range(1, pages + 1):
+                jobs = crawler.crawl_job_list(keyword=keyword, page=page)
+                if jobs:
+                    save_to_database(jobs)
+        except Exception as e:
+            print(f"前程无忧爬虫错误: {e}")
 
-        thread = threading.Thread(target=run_job51_crawler)
-        thread.daemon = True
-        thread.start()
+    thread = threading.Thread(target=run_job51_crawler)
+    thread.daemon = True
+    thread.start()
 
-    elif crawler_type == "boss":
-        # Boss直聘爬虫
-        import threading
-        from .crawler import boss_crawler
-
-        thread = threading.Thread(target=boss_crawler.run_crawler)
-        thread.daemon = True
-        thread.start()
-
-    crawler_name = "前程无忧" if crawler_type == "job51" else "Boss直聘"
     return JsonResponse(
         {
             "success": True,
-            "message": f"{crawler_name}爬虫已启动: {keyword} {city or '全国'} {pages}页",
+            "message": f"前程无忧爬虫已启动: {keyword} {city or '全国'} {pages}页",
         }
     )
 

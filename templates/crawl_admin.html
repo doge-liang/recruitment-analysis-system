@@ -43,7 +43,6 @@
                     <label>选择爬虫平台</label>
                     <select id="crawlerSelect">
                         <option value="job51">🕷️ 前程无忧 (51job.com)</option>
-                        <option value="boss">🕷️ Boss直聘 (zhipin.com)</option>
                     </select>
                 </div>
                 
@@ -114,13 +113,8 @@
     <script>
         // 更新平台显示
         document.getElementById('crawlerSelect').addEventListener('change', function() {
-            var platform = this.value;
             var badge = document.getElementById('platformBadge');
-            if (platform === 'job51') {
-                badge.textContent = '🕷️ 前程无忧 (51job.com)';
-            } else if (platform === 'boss') {
-                badge.textContent = '🕷️ Boss直聘 (zhipin.com)';
-            }
+            badge.textContent = '🕷️ 前程无忧 (51job.com)';
         });
         
         document.getElementById('crawlForm').addEventListener('submit', function(e) {
@@ -139,16 +133,14 @@
                 logEl.scrollTop = logEl.scrollHeight;
             }
             
-            var crawler = document.getElementById('crawlerSelect').value;
             var keyword = document.getElementById('keyword').value;
             var city = document.getElementById('city').value;
             var pages = document.getElementById('pages').value;
             
             // 显示选择的平台
-            var platformName = crawler === 'job51' ? '前程无忧' : 'Boss直聘';
-            document.getElementById('crawlerPlatform').textContent = platformName;
+            document.getElementById('crawlerPlatform').textContent = '前程无忧';
             
-            addLog('正在启动 ' + platformName + ' 爬虫...');
+            addLog('正在启动 前程无忧 爬虫...');
             addLog('关键词: ' + keyword + ', 城市: ' + (city || '全国') + ', 页数: ' + pages);
             
             fetch('/myApp/admin/crawl/start/', {
@@ -158,7 +150,7 @@
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    crawler: crawler,
+                    crawler: 'job51',
                     keyword: keyword,
                     city: city,
                     pages: parseInt(pages)
@@ -226,8 +218,7 @@
                 document.getElementById('crawledCount').textContent = data.raw_count;
                 document.getElementById('savedCount').textContent = data.saved_count;
                 if (data.crawler) {
-                    var platformName = data.crawler === 'job51' ? '前程无忧' : 'Boss直聘';
-                    document.getElementById('crawlerPlatform').textContent = platformName;
+                    document.getElementById('crawlerPlatform').textContent = '前程无忧';
                 }
             });
         });
