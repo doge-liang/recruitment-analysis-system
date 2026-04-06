@@ -30,7 +30,7 @@
 
 ### 第一步：安装 Miniconda
 
-下载并安装：https://docs.conda.io/en/latest/miniconda.html
+下载并安装：<https://docs.conda.io/en/latest/miniconda.html>
 
 安装完成后打开 **CMD**，添加环境变量：
 
@@ -39,6 +39,7 @@ setx PATH "%PATH%;C:\Users\你的用户名\miniconda3;C:\Users\你的用户名\m
 ```
 
 关闭并重新打开 CMD，验证：
+
 ```batch
 conda --version
 ```
@@ -63,11 +64,13 @@ pip install -r requirements.txt
 在项目 `static/js/` 目录下创建文件：
 
 **echarts.min.js**：
+
 ```batch
 curl -o static/js/echarts.min.js https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js
 ```
 
 **echarts-wordcloud.min.js**（词云图需要）：
+
 ```batch
 curl -o static/js/echarts-wordcloud.min.js https://cdn.jsdelivr.net/npm/echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js
 ```
@@ -79,6 +82,7 @@ docker run -d --name recruitment_mysql -e MYSQL_ROOT_PASSWORD=root123456 -e MYSQ
 ```
 
 如果容器已存在：
+
 ```batch
 docker start recruitment_mysql
 ```
@@ -107,6 +111,7 @@ DATABASES = {
 ```
 
 并在 `settings.py` 顶部添加（Windows 兼容 MySQL）：
+
 ```python
 import pymysql
 pymysql.install_as_MySQLdb()
@@ -135,14 +140,16 @@ python salary_predictor.py
 ```
 
 训练完成后会生成：
+
 - `ml_model/salary_model.pkl` - 薪资预测模型
 - `ml_model/job_recommender.pkl` - 岗位推荐模型
 
 ### 第十一步：访问系统
 
-浏览器打开：http://localhost:8000/myApp/login/
+浏览器打开：<http://localhost:8000/myApp/login/>
 
 默认管理员账号自行创建：
+
 ```batch
 python manage.py createsuperuser
 ```
@@ -184,7 +191,7 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-访问 http://127.0.0.1:8000/myApp/login/
+访问 <http://127.0.0.1:8000/myApp/login/>
 
 ---
 
@@ -206,10 +213,8 @@ recruitment_system/
 │   ├── urls.py            # URL路由
 │   └── admin.py           # 后台管理
 ├── crawler/               # 爬虫模块
-│   ├── job51_crawler.py           # 前程无忧基础爬虫
-│   ├── job51_crawler_enhanced.py  # 增强版（断点续传、批量控制）
+│   ├── job51_crawler.py           # 前程无忧爬虫
 │   ├── checkpoint_manager.py      # 检查点管理器
-│   ├── boss_crawler.py            # BOSS直聘爬虫（旧）
 │   └── tests/                     # 测试文件
 │       ├── test_crawler_admin_playwright.py
 │       └── test_checkpoint_manager.py
@@ -235,7 +240,7 @@ recruitment_system/
 
 1. **访问爬虫管理页面**
    - 登录管理员账号
-   - 访问 http://localhost:8000/myApp/admin/crawl/
+   - 访问 <http://localhost:8000/myApp/admin/crawl/>
 
 2. **配置爬取参数**
    - 搜索关键词（如：大数据、数据分析）
@@ -248,6 +253,7 @@ recruitment_system/
    - 支持随时查询任务状态
 
 **API端点：**
+
 - `GET /myApp/admin/crawl/` - 管理页面
 - `POST /myApp/admin/crawl/start/` - 启动爬虫
 - `GET /myApp/admin/crawl/status/` - 查询进度
@@ -261,23 +267,23 @@ cd crawler
 python job51_crawler.py
 ```
 
-#### 增强版爬虫（支持断点续传和批量控制）
+#### 爬虫（支持断点续传和批量控制）
 
 ```bash
 # 小规模测试（5页）
-python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 5
+python crawler/job51_crawler.py --keyword "大数据" --pages 5
 
 # 中等规模（100页）
-python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 100
+python crawler/job51_crawler.py --keyword "大数据" --pages 100
 
 # 大规模爬取（1000页 ≈ 20000条数据）
-python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 1000
+python crawler/job51_crawler.py --keyword "大数据" --pages 1000
 
 # 断点续传（恢复之前的爬取）
-python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 1000
+python crawler/job51_crawler.py --keyword "大数据" --pages 1000
 
 # 从头开始（忽略检查点）
-python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 1000 --no-resume
+python crawler/job51_crawler.py --keyword "大数据" --pages 1000 --no-resume
 ```
 
 #### 自动脚本（批量采集20000+数据）
@@ -288,6 +294,7 @@ chmod +x crawl_20000_data.sh
 ```
 
 爬虫会从前程无忧(51job.com)采集大数据相关岗位信息，包括：
+
 - 职位名称
 - 薪资范围
 - 学历要求
@@ -302,12 +309,7 @@ chmod +x crawl_20000_data.sh
 在代码中修改参数：
 
 ```python
-# 基础版
 from crawler.job51_crawler import run_crawler
-run_crawler(keyword='大数据', pages=5)
-
-# 增强版（支持断点续传）
-from crawler.job51_crawler_enhanced import run_crawler
 run_crawler(keyword='大数据', city='上海', pages=50, resume=True)
 ```
 
@@ -360,13 +362,11 @@ python import_jobs.py
 - ✅ WSL2 + Windows Chrome
 
 **解决方案：**
+
 ```bash
 # Windows本地运行
 conda activate recruitment_sys
-python crawler/job51_crawler.py
-
-# 或使用增强版
-python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 50
+python crawler/job51_crawler.py --keyword "大数据" --pages 50
 ```
 
 ### 反爬机制

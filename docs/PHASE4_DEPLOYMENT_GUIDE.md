@@ -7,7 +7,7 @@
 **已完成的准备工作：**
 ✅ 断点续传系统  
 ✅ 批量控制系统  
-✅ 增强版爬虫  
+✅ 爬虫  
 ✅ 生产环境脚本  
 
 ## 生产环境部署步骤
@@ -59,13 +59,13 @@ chmod +x crawl_20000_data.sh
 conda activate recruitment_sys
 
 # 第一批: 大数据 200页
-python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 200
+python crawler/job51_crawler.py --keyword "大数据" --pages 200
 
 # 第二批: 数据分析 200页  
-python crawler/job51_crawler_enhanced.py --keyword "数据分析" --pages 200
+python crawler/job51_crawler.py --keyword "数据分析" --pages 200
 
 # 第三批: 数据挖掘 200页
-python crawler/job51_crawler_enhanced.py --keyword "数据挖掘" --pages 200
+python crawler/job51_crawler.py --keyword "数据挖掘" --pages 200
 
 # 继续直到达到20000条...
 ```
@@ -108,10 +108,10 @@ tail -f logs/crawl_20000_*.log
 
 ```bash
 # 检查点会自动保存，重新运行相同命令即可恢复
-python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 200
+python crawler/job51_crawler.py --keyword "大数据" --pages 200
 
 # 如果想从头开始（忽略检查点）
-python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 200 --no-resume
+python crawler/job51_crawler.py --keyword "大数据" --pages 200 --no-resume
 ```
 
 ## 数据验证
@@ -131,7 +131,8 @@ print(f"薪资分布: {dict(JobInfo.objects.values('salary').annotate(count=mode
 ## 文件清单
 
 部署所需文件：
-- `crawler/job51_crawler_enhanced.py` - 增强版爬虫
+
+- `crawler/job51_crawler.py` - 爬虫
 - `crawler/checkpoint_manager.py` - 断点续传
 - `crawl_20000_data.sh` - 自动运行脚本
 - `requirements.txt` - 依赖列表
@@ -146,6 +147,7 @@ print(f"薪资分布: {dict(JobInfo.objects.values('salary').annotate(count=mode
 ## 联系支持
 
 如遇问题：
+
 1. 检查日志文件 `logs/crawl_20000_*.log`
 2. 查看检查点文件 `crawler_checkpoint.json`
 3. 运行单元测试 `python crawler/tests/test_checkpoint_manager.py`

@@ -19,6 +19,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from .models import JobInfo, History, UserProfile
 from crawler.registry import list_crawlers, get_crawler_module, is_valid_crawler
+from crawler.run_store import CrawlRunStore
 
 
 # ==================== 工具函数 ====================
@@ -578,6 +579,28 @@ def crawl_start_api(request):
             {"error": "无效的爬虫脚本: {}".format(crawler), "success": False}
         )
 
+    # 初始化运行存储
+    run_store = CrawlRunStore()
+
+    # 检查是否有正在运行的任务
+    if run_store.has_running_run():
+        current_status = run_store.read_status()
+        return JsonResponse(
+            {
+                "success": False,
+                "error": f"已有爬虫正在运行: {current_status.get('crawler', '未知')} (Run ID: {current_status.get('run_id', '未知')})",
+                "run_id": current_status.get("run_id"),
+            }
+        )
+
+    # 清理旧运行记录
+    run_store.cleanup_old_runs(keep_runs=10, max_age_days=7)
+
+    # 创建新的运行记录
+    run_id = run_store.create_run(
+        crawler=crawler, keyword=keyword, city=city, pages=pages, headless=headless
+    )
+
     # 获取爬虫模块并启动
     import threading
 
@@ -585,10 +608,20 @@ def crawl_start_api(request):
         try:
             module = get_crawler_module(crawler)
             module.run_crawler(
-                keyword=keyword, city=city, pages=pages, headless=headless
+                keyword=keyword,
+                city=city,
+                pages=pages,
+                headless=headless,
+                run_store=run_store,
+                run_id=run_id,
             )
         except Exception as e:
-            print(f"爬虫错误: {e}")
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.error(f"爬虫运行错误: {e}")
+            # 标记为错误状态
+            run_store.mark_error(run_id, str(e))
 
     thread = threading.Thread(target=run_crawler_thread)
     thread.daemon = True
@@ -598,26 +631,66 @@ def crawl_start_api(request):
         {
             "success": True,
             "message": f"{crawler} 爬虫已启动: {keyword} {city or '全国'} {pages}页 {'(调试模式)' if not headless else ''}",
+            "run_id": run_id,
+            "status": "starting",
         }
     )
 
 
 @login_required
 def crawl_status_api(request):
-    """查询爬虫状态API"""
+    """查询爬虫状态API - 从文件读取真实进度"""
     if not request.user.is_staff:
         return JsonResponse({"error": "权限不足"})
 
-    # 返回爬虫状态
+    # 获取查询参数
+    run_id = request.GET.get("run_id")
+    cursor = int(request.GET.get("cursor", 0))
+
+    # 初始化运行存储
+    run_store = CrawlRunStore()
+
+    # 读取状态
+    status = run_store.read_status(run_id)
+
+    if not status:
+        # 没有运行记录，返回空闲状态
+        return JsonResponse(
+            {
+                "status": "idle",
+                "crawler": "",
+                "run_id": None,
+                "current_page": 0,
+                "total_pages": 0,
+                "raw_count": 0,
+                "saved_count": 0,
+                "error_count": 0,
+                "logs": [],
+                "log_cursor": 0,
+                "error": "",
+            }
+        )
+
+    # 读取新的日志行
+    logs, new_cursor = run_store.read_new_logs(run_id, cursor=cursor, limit=50)
+
     return JsonResponse(
         {
-            "status": "idle",
-            "crawler": "",
-            "current_page": 0,
-            "total_pages": 0,
-            "raw_count": 0,
-            "saved_count": 0,
-            "logs": [],
+            "status": status.get("status", "unknown"),
+            "crawler": status.get("crawler", ""),
+            "run_id": status.get("run_id"),
+            "keyword": status.get("keyword", ""),
+            "city": status.get("city", ""),
+            "current_page": status.get("current_page", 0),
+            "total_pages": status.get("total_pages", 0),
+            "raw_count": status.get("raw_count", 0),
+            "saved_count": status.get("saved_count", 0),
+            "error_count": status.get("error_count", 0),
+            "error": status.get("error", ""),
+            "started_at": status.get("started_at"),
+            "finished_at": status.get("finished_at"),
+            "logs": logs,
+            "log_cursor": new_cursor,
         }
     )
 

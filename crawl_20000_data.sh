@@ -90,7 +90,7 @@ for keyword in "${KEYWORDS[@]}"; do
     START_TIME=$(date +%s)
     
     # 运行爬虫
-    if conda run -n $CONDA_ENV python crawler/job51_crawler_enhanced.py \
+    if conda run -n $CONDA_ENV python crawler/job51_crawler.py \
         --keyword "$keyword" \
         --pages $PAGES_PER_KEYWORD \
         --no-resume 2>&1 | tee -a "$LOG_FILE"; then

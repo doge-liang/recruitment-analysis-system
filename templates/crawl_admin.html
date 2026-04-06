@@ -166,9 +166,18 @@
             document.getElementById('log').style.display = 'block';
             
             var logEl = document.getElementById('log');
+            // 全局变量存储运行状态
+            var currentRunId = null;
+            var logCursor = 0;
+            
             function addLog(msg) {
                 logEl.innerHTML += new Date().toLocaleTimeString() + ' ' + msg + '<br>';
                 logEl.scrollTop = logEl.scrollHeight;
+            }
+            
+            function clearLog() {
+                logEl.innerHTML = '';
+                logCursor = 0;
             }
             
             var crawler = document.getElementById('crawlerSelect').value;
@@ -186,6 +195,9 @@
                 if (debugMode) {
                     addLog('调试模式已开启：将显示浏览器窗口');
                 }
+                
+                // 清空日志和重置游标
+                clearLog();
 
                 fetch('/myApp/admin/crawl/start/', {
                     method: 'POST',
@@ -207,16 +219,30 @@
                     addLog('爬虫已启动: ' + data.message);
                     document.getElementById('crawlStatus').textContent = '采集中';
                     
+                    // 保存 run_id
+                    currentRunId = data.run_id;
+                    logCursor = 0;
+                    
                     // 启动进度查询
                     var checkInterval = setInterval(function() {
-                        fetch('/myApp/admin/crawl/status/')
+                        var url = '/myApp/admin/crawl/status/?cursor=' + logCursor;
+                        if (currentRunId) {
+                            url += '&run_id=' + encodeURIComponent(currentRunId);
+                        }
+                        fetch(url)
                         .then(res => res.json())
                         .then(status => {
                             document.getElementById('currentPage').textContent = status.current_page + '/' + status.total_pages;
                             document.getElementById('crawledCount').textContent = status.raw_count;
                             document.getElementById('savedCount').textContent = status.saved_count;
                             
-                            if (status.logs) {
+                            // 更新游标
+                            if (status.log_cursor !== undefined) {
+                                logCursor = status.log_cursor;
+                            }
+                            
+                            // 追加新日志（而不是替换）
+                            if (status.logs && status.logs.length > 0) {
                                 status.logs.forEach(function(log) {
                                     addLog(log);
                                 });
@@ -233,7 +259,7 @@
                                 document.getElementById('crawlStatus').textContent = '出错';
                                 btn.disabled = false;
                                 btn.textContent = '开始采集';
-                                addLog('采集出错: ' + status.error);
+                                addLog('采集出错: ' + (status.error || '未知错误'));
                             }
                         });
                     }, 3000);
@@ -253,9 +279,15 @@
         document.getElementById('queryBtn').addEventListener('click', function() {
             // 立即显示状态区域
             document.getElementById('status').style.display = 'block';
+            document.getElementById('log').style.display = 'block';
             document.getElementById('crawlStatus').textContent = '查询中...';
             
-            fetch('/myApp/admin/crawl/status/')
+            var url = '/myApp/admin/crawl/status/?cursor=' + logCursor;
+            if (currentRunId) {
+                url += '&run_id=' + encodeURIComponent(currentRunId);
+            }
+            
+            fetch(url)
             .then(res => res.json())
             .then(data => {
                 document.getElementById('crawlStatus').textContent = data.status === 'running' ? '采集中' : (data.status === 'completed' ? '已完成' : '等待中');
@@ -264,6 +296,18 @@
                 document.getElementById('savedCount').textContent = data.saved_count;
                 if (data.crawler) {
                     document.getElementById('crawlerPlatform').textContent = data.crawler;
+                }
+                
+                // 更新游标
+                if (data.log_cursor !== undefined) {
+                    logCursor = data.log_cursor;
+                }
+                
+                // 追加新日志
+                if (data.logs && data.logs.length > 0) {
+                    data.logs.forEach(function(log) {
+                        addLog(log);
+                    });
                 }
             });
         });

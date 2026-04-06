@@ -7,6 +7,7 @@
 """
 
 import json
+import logging
 import os
 import random
 import re
@@ -51,6 +52,13 @@ except ImportError as e:
     print(f"[错误] 无法导入 checkpoint_manager: {e}")
     print(f"[调试] Python path: {sys.path}")
     print(f"[调试] 当前文件: {__file__}")
+    raise
+
+# 导入运行存储管理器
+try:
+    from run_store import CrawlRunStore, build_crawler_logger
+except ImportError as e:
+    print(f"[错误] 无法导入 run_store: {e}")
     raise
 
 
@@ -119,6 +127,8 @@ class Job51Crawler:
         checkpoint_file: str = "crawler_checkpoint.json",
         batch_state_file: str = "batch_state.json",
         headless: bool = True,
+        run_store: Optional[CrawlRunStore] = None,
+        run_id: Optional[str] = None,
     ):
         self.base_url = "https://we.51job.com/pc/search"
         self.data = []
@@ -143,6 +153,11 @@ class Job51Crawler:
             "start_time": None,
             "last_page_time": None,
         }
+
+        # 运行存储和日志
+        self.run_store = run_store
+        self.run_id = run_id
+        self.logger = self._setup_logger()
 
     def _setup_anti_detection(self, headless=True):
         """配置反检测选项
@@ -178,6 +193,60 @@ class Job51Crawler:
         self.chrome_options.add_argument(
             "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
+
+    def _setup_logger(self) -> logging.Logger:
+        """设置日志记录器
+
+        如果有 run_store 和 run_id，使用文件日志；否则使用控制台日志。
+        """
+        if self.run_store and self.run_id:
+            return build_crawler_logger(self.run_store, self.run_id)
+        else:
+            # 创建简单的控制台 logger
+            logger = logging.getLogger(f"crawler.standalone")
+            logger.setLevel(logging.INFO)
+            if not logger.handlers:
+                handler = logging.StreamHandler()
+                handler.setLevel(logging.INFO)
+                formatter = logging.Formatter(
+                    "[%(asctime)s] %(levelname)s: %(message)s",
+                    datefmt="%Y-%m-%d %H:%M:%S",
+                )
+                handler.setFormatter(formatter)
+                logger.addHandler(handler)
+            return logger
+
+    def _log(self, message: str, level: str = "info"):
+        """统一的日志记录方法"""
+        if level == "info":
+            self.logger.info(message)
+        elif level == "warning":
+            self.logger.warning(message)
+        elif level == "error":
+            self.logger.error(message)
+        elif level == "debug":
+            self.logger.debug(message)
+
+    def _update_status(self, **kwargs):
+        """更新运行状态到文件"""
+        if self.run_store and self.run_id:
+            self.run_store.update_status(self.run_id, **kwargs)
+
+    def _mark_error(self, error: str):
+        """标记运行为错误状态"""
+        if self.run_store and self.run_id:
+            self.run_store.mark_error(self.run_id, error)
+
+    def _mark_completed(self):
+        """标记运行为完成状态"""
+        if self.run_store and self.run_id:
+            self.run_store.mark_completed(
+                self.run_id,
+                current_page=self.stats["pages_processed"],
+                raw_count=self.stats["records_collected"],
+                saved_count=self.stats["records_saved"],
+                error_count=self.stats["errors"],
+            )
 
     def create_driver(self):
         """创建浏览器驱动"""
@@ -318,7 +387,7 @@ class Job51Crawler:
             else:
                 url = f"{self.base_url}?keyword={keyword}&page={page}"
 
-            print(f"  访问: {url}")
+            self._log(f"  访问: {url}")
             driver.get(url)
 
             # 等待页面加载
@@ -327,12 +396,12 @@ class Job51Crawler:
             # 【调试输出】显示当前页面信息
             current_url = driver.current_url
             page_title = driver.title
-            print(f"  [调试] 当前URL: {current_url}")
-            print(f"  [调试] 页面标题: {page_title}")
+            self._log(f"  [调试] 当前URL: {current_url}", level="debug")
+            self._log(f"  [调试] 页面标题: {page_title}", level="debug")
 
             # 如果URL发生变化，可能被重定向到验证页面
             if "we.51job.com" not in current_url:
-                print(f"  [警告] 页面被重定向！可能遇到反爬验证")
+                self._log(f"  [警告] 页面被重定向！可能遇到反爬验证", level="warning")
                 return []
 
             # 滚动页面以加载所有内容
@@ -353,11 +422,11 @@ class Job51Crawler:
                         By.CSS_SELECTOR, "[class*='joblist-item']"
                     )
                 except:
-                    print("  未找到职位卡片")
+                    self._log("  未找到职位卡片")
                     self.rate_limiter.report_failure()
                     return []
 
-            print(f"  找到 {len(job_cards)} 个职位卡片")
+            self._log(f"  找到 {len(job_cards)} 个职位卡片")
 
             jobs = []
             for i, card in enumerate(job_cards):
@@ -458,7 +527,7 @@ class Job51Crawler:
                     jobs.append(job_info)
 
                 except Exception as e:
-                    print(f"  解析第 {i + 1} 个职位卡片时出错: {e}")
+                    self._log(f"  解析第 {i + 1} 个职位卡片时出错: {e}", level="error")
                     continue
 
             # 报告成功
@@ -470,7 +539,7 @@ class Job51Crawler:
             return jobs
 
         except Exception as e:
-            print(f"  爬取页面时出错: {e}")
+            self._log(f"  爬取页面时出错: {e}", level="error")
             self.rate_limiter.report_failure()
             return []
 
@@ -505,7 +574,7 @@ class Job51Crawler:
                         skipped_count += 1
 
                 except Exception as e:
-                    print(f"  保存数据时出错: {e}")
+                    self._log(f"  保存数据时出错: {e}", level="error")
                     continue
 
         return saved_count, skipped_count
@@ -536,8 +605,8 @@ class Job51Crawler:
         if resume:
             checkpoint = self.checkpoint_manager.load_checkpoint()
             if checkpoint:
-                print(f"[断点续传] 发现之前的进度: 第{checkpoint.current_page}页")
-                print(f"[断点续传] 已完成页面: {len(checkpoint.completed_pages)}页")
+                self._log(f"[断点续传] 发现之前的进度: 第{checkpoint.current_page}页")
+                self._log(f"[断点续传] 已完成页面: {len(checkpoint.completed_pages)}页")
 
                 # 使用检查点的参数
                 keyword = checkpoint.keyword
@@ -546,24 +615,29 @@ class Job51Crawler:
                 # 获取剩余页面
                 remaining_pages = self.checkpoint_manager.get_remaining_pages(1, pages)
                 if not remaining_pages:
-                    print("[断点续传] 所有页面已完成！")
+                    self._log("[断点续传] 所有页面已完成！")
                     return self._get_final_stats()
 
-                print(f"[断点续传] 继续爬取 {len(remaining_pages)} 个剩余页面")
+                self._log(f"[断点续传] 继续爬取 {len(remaining_pages)} 个剩余页面")
 
-        print("=" * 70)
-        print("前程无忧爬虫启动")
-        print("=" * 70)
-        print(f"\n配置:")
-        print(f"  - 关键词: {keyword}")
-        print(f"  - 城市: {city or '全国'}")
-        print(f"  - 页数: {pages}")
-        print(f"  - 断点续传: {'已启用' if resume else '已禁用'}")
-        print(f"  - 时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        self._log("=" * 70)
+        self._log("前程无忧爬虫启动")
+        self._log("=" * 70)
+        self._log(f"\n配置:")
+        self._log(f"  - 关键词: {keyword}")
+        self._log(f"  - 城市: {city or '全国'}")
+        self._log(f"  - 页数: {pages}")
+        self._log(f"  - 断点续传: {'已启用' if resume else '已禁用'}")
+        self._log(f"  - 时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+        # 标记为运行中
+        self._update_status(
+            status="running", keyword=keyword, city=city, total_pages=pages
+        )
 
         # 使用批次计算
         batch_calc = BatchCalculator(total_pages=pages, batch_size=50)
-        print(
+        self._log(
             f"[批次] 共分为 {batch_calc.total_batches} 批，每批约{batch_calc.batch_size}页"
         )
 
@@ -581,20 +655,20 @@ class Job51Crawler:
                         if not self.checkpoint_manager.is_page_completed(p)
                     ]
                     if not pages_in_batch:
-                        print(f"\n[批次 {batch_num}] 该批次所有页面已完成，跳过")
+                        self._log(f"\n[批次 {batch_num}] 该批次所有页面已完成，跳过")
                         continue
                     start_page = min(pages_in_batch)
                     end_page = max(pages_in_batch)
 
-                print(f"\n{'=' * 70}")
-                print(
+                self._log(f"\n{'=' * 70}")
+                self._log(
                     f"[批次 {batch_num}/{batch_calc.total_batches}] 页面 {start_page}-{end_page}"
                 )
-                print(f"{'=' * 70}")
+                self._log(f"{'=' * 70}")
 
                 batch_jobs = []
                 for page in range(start_page, end_page + 1):
-                    print(f"\n正在爬取第 {page}/{pages} 页...")
+                    self._log(f"\n正在爬取第 {page}/{pages} 页...")
 
                     jobs = self.crawl_job_list(keyword=keyword, page=page)
 
@@ -603,12 +677,20 @@ class Job51Crawler:
                         all_jobs.extend(jobs)
                         self.stats["pages_processed"] += 1
                         self.stats["records_collected"] += len(jobs)
-                        print(f"  第 {page} 页成功获取 {len(jobs)} 条职位信息")
-                        print(
+                        self._log(f"  第 {page} 页成功获取 {len(jobs)} 条职位信息")
+                        self._log(
                             f"  本批累计: {len(batch_jobs)} 条 | 总计: {len(all_jobs)} 条"
                         )
+                        # 更新进度状态
+                        self._update_status(
+                            current_page=page, raw_count=self.stats["records_collected"]
+                        )
                     else:
-                        print(f"  第 {page} 页无数据或出错")
+                        self._log(f"  第 {page} 页无数据或出错")
+                        self.stats["errors"] += 1
+                        self._update_status(
+                            current_page=page, error_count=self.stats["errors"]
+                        )
 
                     # 保存检查点（每页保存）
                     self.checkpoint_manager.save_checkpoint(
@@ -622,39 +704,43 @@ class Job51Crawler:
                     # 页面间延时（最后页不需要）
                     if page < end_page:
                         delay = random.uniform(4, 7)
-                        print(f"  等待 {delay:.1f} 秒后翻页...")
+                        self._log(f"  等待 {delay:.1f} 秒后翻页...")
                         time.sleep(delay)
 
                 # 批次完成，保存到数据库
                 if batch_jobs:
-                    print(f"\n[批次 {batch_num}] 保存数据到数据库...")
+                    self._log(f"\n[批次 {batch_num}] 保存数据到数据库...")
                     saved, skipped = self.save_to_database(batch_jobs)
                     self.stats["records_saved"] += saved
-                    print(f"  保存成功: {saved} 条 | 跳过重复: {skipped} 条")
+                    self._log(f"  保存成功: {saved} 条 | 跳过重复: {skipped} 条")
+                    # 更新保存数量
+                    self._update_status(saved_count=self.stats["records_saved"])
 
                 # 批次间休息（除最后一批）
                 if batch_num < batch_calc.total_batches:
                     rest_time = random.uniform(300, 600)  # 5-10分钟
-                    print(
+                    self._log(
                         f"\n[休息] 批次 {batch_num} 完成，休息 {rest_time / 60:.1f} 分钟..."
                     )
-                    print(f"[进度] {batch_calc.get_progress(batch_num):.1f}% 完成")
+                    self._log(f"[进度] {batch_calc.get_progress(batch_num):.1f}% 完成")
                     time.sleep(rest_time)
 
         except KeyboardInterrupt:
-            print("\n\n[!] 用户中断爬虫")
-            print("[断点续传] 进度已保存，下次运行将自动恢复")
+            self._log("\n\n[!] 用户中断爬虫")
+            self._log("[断点续传] 进度已保存，下次运行将自动恢复")
+            self._mark_error("用户中断")
 
         except Exception as e:
-            print(f"\n\n[!] 爬虫异常: {e}")
-            print("[断点续传] 进度已保存，下次运行将自动恢复")
+            self._log(f"\n\n[!] 爬虫异常: {e}")
+            self._log("[断点续传] 进度已保存，下次运行将自动恢复")
+            self._mark_error(str(e))
 
         finally:
             # 保存剩余数据
             if all_jobs and len(all_jobs) > self.stats["records_saved"]:
                 remaining_jobs = all_jobs[self.stats["records_saved"] :]
                 if remaining_jobs:
-                    print(f"\n[收尾] 保存剩余 {len(remaining_jobs)} 条数据...")
+                    self._log(f"\n[收尾] 保存剩余 {len(remaining_jobs)} 条数据...")
                     saved, skipped = self.save_to_database(remaining_jobs)
                     self.stats["records_saved"] += saved
 
@@ -666,20 +752,28 @@ class Job51Crawler:
             time.time() - self.stats["start_time"] if self.stats["start_time"] else 0
         )
 
-        print(f"\n{'=' * 70}")
-        print("爬取完成！")
-        print(f"{'=' * 70}")
-        print(f"统计信息:")
-        print(f"  - 处理页面: {self.stats['pages_processed']} 页")
-        print(f"  - 采集记录: {self.stats['records_collected']} 条")
-        print(f"  - 保存记录: {self.stats['records_saved']} 条")
-        print(f"  - 运行时间: {elapsed / 60:.1f} 分钟")
+        self._log(f"\n{'=' * 70}")
+        self._log("爬取完成！")
+        self._log(f"{'=' * 70}")
+        self._log(f"统计信息:")
+        self._log(f"  - 处理页面: {self.stats['pages_processed']} 页")
+        self._log(f"  - 采集记录: {self.stats['records_collected']} 条")
+        self._log(f"  - 保存记录: {self.stats['records_saved']} 条")
+        self._log(f"  - 运行时间: {elapsed / 60:.1f} 分钟")
         if self.stats["pages_processed"] > 0:
-            print(f"  - 平均速度: {elapsed / self.stats['pages_processed']:.1f} 秒/页")
-        print(f"{'=' * 70}")
+            self._log(
+                f"  - 平均速度: {elapsed / self.stats['pages_processed']:.1f} 秒/页"
+            )
+        self._log(f"{'=' * 70}")
 
         # 完成后清除检查点
         self.checkpoint_manager.clear_checkpoint()
+
+        # 标记为完成（如果还没有标记为错误）
+        if self.run_store and self.run_id:
+            current_status = self.run_store.read_status(self.run_id)
+            if current_status and current_status.get("status") != "error":
+                self._mark_completed()
 
         return {
             "pages_processed": self.stats["pages_processed"],
@@ -732,6 +826,8 @@ def run_crawler(
     pages: int = 5,
     resume: bool = True,
     headless: bool = True,
+    run_store: Optional[CrawlRunStore] = None,
+    run_id: Optional[str] = None,
 ) -> Dict:
     """
     运行爬虫主函数（便捷接口）
@@ -742,11 +838,17 @@ def run_crawler(
         pages: 爬取页数
         resume: 是否启用断点续传
         headless: 是否使用无头模式（默认True）。设为False显示浏览器窗口用于调试
+        run_store: 运行存储管理器（用于Web UI进度跟踪）
+        run_id: 运行ID（用于Web UI进度跟踪）
 
     Returns:
         Dict: 爬取统计信息
     """
-    crawler = Job51Crawler(headless=headless)
+    crawler = Job51Crawler(
+        headless=headless,
+        run_store=run_store,
+        run_id=run_id,
+    )
     return crawler.run_crawler_with_checkpoint(
         keyword=keyword,
         city=city,

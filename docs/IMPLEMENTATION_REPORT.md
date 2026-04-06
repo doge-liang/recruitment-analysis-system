@@ -19,6 +19,7 @@
 | `test_start_crawl_with_default_params` | API响应超时 | 添加 `timeout=10000` 到 `to_contain_text()` |
 
 **修改文件：**
+
 - `myApp/views.py` - 第548行权限检查
 - `crawler/tests/test_crawler_admin_playwright.py` - 第52行、第84行
 
@@ -40,15 +41,16 @@
    - records_collected 计数
    - timestamp, session_data, error信息
 
-3. **增强版爬虫** (`crawler/job51_crawler_enhanced.py`)
+3. **爬虫** (`crawler/job51_crawler.py`)
    - 集成CheckpointManager
    - 启动时自动恢复进度
    - 每页完成后保存检查点
    - 完成后自动清理
 
 **使用示例：**
+
 ```python
-from crawler.job51_crawler_enhanced import run_crawler
+from crawler.job51_crawler import run_crawler
 
 # 启用断点续传（默认）
 run_crawler(keyword="大数据", pages=1000, resume=True)
@@ -73,18 +75,20 @@ run_crawler(keyword="大数据", pages=1000, resume=False)
    - 跟踪已完成批次
    - 支持批次级恢复
 
-3. **AdaptiveRateLimiter** (`crawler/job51_crawler_enhanced.py`)
+3. **AdaptiveRateLimiter** (`crawler/job51_crawler.py`)
    - 自适应延迟（3-30秒，带抖动）
    - 成功时减少延迟
    - 失败时增加延迟
    - 连续失败时额外等待
 
 **批量策略：**
+
 | 批次大小 | 批次间休息 | 预估时间/批 |
 |---------|-----------|------------|
 | 50页 | 5-10分钟 | ~25分钟 |
 
 **20000条数据计算：**
+
 - 1000页 ÷ 50页/批 = 20批
 - 每批约25分钟（爬取）+ 5-10分钟（休息）
 - 总时间约 10-12小时
@@ -93,7 +97,7 @@ run_crawler(keyword="大数据", pages=1000, resume=False)
 
 ### 关键特性对比
 
-| 特性 | 原版爬虫 | 增强版爬虫 |
+| 特性 | 原版爬虫 | 爬虫 |
 |------|---------|-----------|
 | 断点续传 | ❌ | ✅ |
 | 批量控制 | ❌ | ✅ |
@@ -115,7 +119,7 @@ run_crawler(keyword="大数据", pages=1000, resume=False)
    - BatchStateManager 类
    - CrawlCheckpoint 数据类
 
-2. `crawler/job51_crawler_enhanced.py` (420行)
+2. `crawler/job51_crawler.py` (420行)
    - AdaptiveRateLimiter 类
    - Job51CrawlerEnhanced 类
    - 命令行接口
@@ -152,6 +156,7 @@ run_crawler(keyword="大数据", pages=1000, resume=False)
    - 约需 7-10天完成
 
 2. **关键词轮换**
+
    ```python
    keywords = ["大数据", "数据分析", "数据挖掘", "机器学习", "人工智能"]
    for keyword in keywords:
@@ -163,6 +168,7 @@ run_crawler(keyword="大数据", pages=1000, resume=False)
    - 分散反爬风险
 
 4. **监控检查点**
+
    ```bash
    # 查看当前进度
    python -c "from crawler.checkpoint_manager import CheckpointManager; \
@@ -180,19 +186,19 @@ cd recruitment_system
 conda activate recruitment_sys
 
 # 小规模测试（5页）
-python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 5
+python crawler/job51_crawler.py --keyword "大数据" --pages 5
 
 # 中等规模（100页）
-python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 100
+python crawler/job51_crawler.py --keyword "大数据" --pages 100
 
 # 大规模爬取（1000页 = 约20000条）
-python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 1000
+python crawler/job51_crawler.py --keyword "大数据" --pages 1000
 
 # 恢复之前的爬取
-python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 1000
+python crawler/job51_crawler.py --keyword "大数据" --pages 1000
 
 # 从头开始（忽略检查点）
-python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 1000 --no-resume
+python crawler/job51_crawler.py --keyword "大数据" --pages 1000 --no-resume
 ```
 
 ---
@@ -226,6 +232,7 @@ python crawler/job51_crawler_enhanced.py --keyword "大数据" --pages 1000 --no
 ## 单元测试
 
 **运行测试：**
+
 ```bash
 # 运行断点续传测试
 python crawler/tests/test_checkpoint_manager.py
@@ -244,18 +251,21 @@ python crawler/tests/test_checkpoint_manager.py
 ## 后续建议
 
 ### 短期（1-2周）
+
 1. ✅ 运行小规模测试（5-10页）验证功能
 2. ✅ 逐步增加到100页测试
 3. ✅ 监控检查点文件是否正常生成
 4. ✅ 测试崩溃恢复功能
 
 ### 中期（2-4周）
+
 1. 实施20000+数据爬取
 2. 监控成功率和错误率
 3. 根据反爬情况调整延迟参数
 4. 收集论文所需截图
 
 ### 长期（可选优化）
+
 1. 实施代理轮换
 2. 使用Playwright替代Selenium
 3. 集成监控系统（如Prometheus）
@@ -287,6 +297,7 @@ python crawler/tests/test_checkpoint_manager.py
 🔄 **Phase 4就绪**: 20000+数据爬取方案已准备
 
 **系统现已具备：**
+
 - 完整的测试覆盖
 - 可靠的断点续传
 - 智能的批量控制
@@ -294,4 +305,3 @@ python crawler/tests/test_checkpoint_manager.py
 - 详细的日志和统计
 
 **可直接开始20000+数据的大规模爬取！**
-
