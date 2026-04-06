@@ -36,16 +36,3 @@ static/js/
 # Credentials
 *.env
 .env
-
-# Generated screenshots and data
-screenshots/
-archive/
-data/crawled/*.csv
-
-# Cache directories
-.ruff_cache/
-.playwright-mcp/
-
-# Log files
-server.log
-*.log

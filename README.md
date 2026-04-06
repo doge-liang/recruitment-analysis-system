@@ -209,6 +209,7 @@ recruitment_system/
 │   ├── job51_crawler.py           # 前程无忧基础爬虫
 │   ├── job51_crawler_enhanced.py  # 增强版（断点续传、批量控制）
 │   ├── checkpoint_manager.py      # 检查点管理器
+│   ├── boss_crawler.py            # BOSS直聘爬虫（旧）
 │   └── tests/                     # 测试文件
 │       ├── test_crawler_admin_playwright.py
 │       └── test_checkpoint_manager.py

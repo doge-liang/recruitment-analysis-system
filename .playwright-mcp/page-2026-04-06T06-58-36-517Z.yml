@@ -1,0 +1,12 @@
+- generic [ref=e2]:
+  - heading "招聘信息分析系统管理后台" [level=1] [ref=e5]:
+    - link "招聘信息分析系统管理后台" [ref=e6] [cursor=pointer]:
+      - /url: /admin/
+  - generic [ref=e11]:
+    - generic [ref=e12]:
+      - generic [ref=e13]: "用户名:"
+      - textbox "用户名:" [active] [ref=e14]
+    - generic [ref=e15]:
+      - generic [ref=e16]: "密码:"
+      - textbox "密码:" [ref=e17]
+    - button "登录" [ref=e19] [cursor=pointer]

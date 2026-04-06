@@ -1,0 +1,68 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - heading "招聘信息分析系统管理后台" [level=1] [ref=e5]:
+      - link "招聘信息分析系统管理后台" [ref=e6] [cursor=pointer]:
+        - /url: /admin/
+    - generic [ref=e7]:
+      - text: 欢迎，
+      - strong [ref=e8]: admin
+      - text: .
+      - link "查看站点" [ref=e9] [cursor=pointer]:
+        - /url: /
+      - text: /
+      - link "修改密码" [ref=e10] [cursor=pointer]:
+        - /url: /admin/password_change/
+      - text: /
+      - link "注销" [ref=e11] [cursor=pointer]:
+        - /url: /admin/logout/
+  - generic [ref=e14]:
+    - heading "站点管理" [level=1] [ref=e15]
+    - generic [ref=e16]:
+      - table "🕷️ 爬虫管理工具" [ref=e18]:
+        - caption [ref=e19]: 🕷️ 爬虫管理工具
+        - rowgroup [ref=e20]:
+          - row "前程无忧数据采集 通过可视化界面管理爬虫任务，实时查看采集进度和日志。 进入爬虫管理界面 →" [ref=e21]:
+            - cell "前程无忧数据采集 通过可视化界面管理爬虫任务，实时查看采集进度和日志。 进入爬虫管理界面 →" [ref=e22]:
+              - heading "前程无忧数据采集" [level=3] [ref=e23]
+              - paragraph [ref=e24]: 通过可视化界面管理爬虫任务，实时查看采集进度和日志。
+              - link "进入爬虫管理界面 →" [ref=e25] [cursor=pointer]:
+                - /url: /myApp/admin/crawl/
+      - table "Myapp" [ref=e27]:
+        - caption [ref=e28]:
+          - link "Myapp" [ref=e29] [cursor=pointer]:
+            - /url: /admin/myApp/
+        - rowgroup [ref=e30]:
+          - row "招聘信息 增加 修改" [ref=e31]:
+            - rowheader "招聘信息" [ref=e32]:
+              - link "招聘信息" [ref=e33] [cursor=pointer]:
+                - /url: /admin/myApp/jobinfo/
+            - cell "增加" [ref=e34]:
+              - link "增加" [ref=e35] [cursor=pointer]:
+                - /url: /admin/myApp/jobinfo/add/
+            - cell "修改" [ref=e36]:
+              - link "修改" [ref=e37] [cursor=pointer]:
+                - /url: /admin/myApp/jobinfo/
+          - row "浏览记录 增加 修改" [ref=e38]:
+            - rowheader "浏览记录" [ref=e39]:
+              - link "浏览记录" [ref=e40] [cursor=pointer]:
+                - /url: /admin/myApp/history/
+            - cell "增加" [ref=e41]:
+              - link "增加" [ref=e42] [cursor=pointer]:
+                - /url: /admin/myApp/history/add/
+            - cell "修改" [ref=e43]:
+              - link "修改" [ref=e44] [cursor=pointer]:
+                - /url: /admin/myApp/history/
+          - row "用户扩展信息 增加 修改" [ref=e45]:
+            - rowheader "用户扩展信息" [ref=e46]:
+              - link "用户扩展信息" [ref=e47] [cursor=pointer]:
+                - /url: /admin/myApp/userprofile/
+            - cell "增加" [ref=e48]:
+              - link "增加" [ref=e49] [cursor=pointer]:
+                - /url: /admin/myApp/userprofile/add/
+            - cell "修改" [ref=e50]:
+              - link "修改" [ref=e51] [cursor=pointer]:
+                - /url: /admin/myApp/userprofile/
+    - generic [ref=e53]:
+      - heading "最近动作" [level=2] [ref=e54]
+      - heading "我的动作" [level=3] [ref=e55]
+      - paragraph [ref=e56]: 无可用的

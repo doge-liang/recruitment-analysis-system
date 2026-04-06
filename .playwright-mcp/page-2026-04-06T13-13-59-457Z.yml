@@ -1,0 +1,38 @@
+- generic [active] [ref=e1]:
+  - heading "爬虫管理后台" [level=1] [ref=e3]
+  - generic [ref=e5]:
+    - generic [ref=e6]: 🕷️ 招聘数据采集
+    - heading "选择爬虫脚本" [level=2] [ref=e7]
+    - generic [ref=e8]:
+      - generic [ref=e9]:
+        - generic [ref=e10]: 选择爬虫平台
+        - combobox [ref=e11] [cursor=pointer]:
+          - option "🕷️ 前程无忧 (51job.com)" [selected]
+          - option "🕷️ Boss直聘 (zhipin.com)"
+      - generic [ref=e12]:
+        - generic [ref=e13]: 搜索关键词
+        - textbox "请输入搜索关键词" [ref=e14]: 大数据
+      - generic [ref=e15]:
+        - generic [ref=e16]: 城市
+        - combobox [ref=e17] [cursor=pointer]:
+          - option "全国" [selected]
+          - option "北京"
+          - option "上海"
+          - option "深圳"
+          - option "广州"
+          - option "杭州"
+          - option "成都"
+          - option "武汉"
+          - option "南京"
+          - option "苏州"
+          - option "西安"
+          - option "重庆"
+          - option "天津"
+          - option "长沙"
+          - option "郑州"
+          - option "合肥"
+      - generic [ref=e18]:
+        - generic [ref=e19]: 爬取页数
+        - spinbutton [ref=e20]: "5"
+      - button "开始采集" [ref=e21] [cursor=pointer]
+      - button "查询进度" [ref=e22] [cursor=pointer]
