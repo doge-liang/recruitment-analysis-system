@@ -561,6 +561,7 @@ def crawl_start_api(request):
         keyword = data.get("keyword", "大数据")
         city = data.get("city", "")
         pages = int(data.get("pages", 5))
+        headless = data.get("headless", True)  # 默认无头模式
 
         # 限制页数
         pages = min(pages, 50)
@@ -583,7 +584,9 @@ def crawl_start_api(request):
     def run_crawler_thread():
         try:
             module = get_crawler_module(crawler)
-            module.run_crawler(keyword=keyword, city=city, pages=pages)
+            module.run_crawler(
+                keyword=keyword, city=city, pages=pages, headless=headless
+            )
         except Exception as e:
             print(f"爬虫错误: {e}")
 
@@ -594,7 +597,7 @@ def crawl_start_api(request):
     return JsonResponse(
         {
             "success": True,
-            "message": f"{crawler} 爬虫已启动: {keyword} {city or '全国'} {pages}页",
+            "message": f"{crawler} 爬虫已启动: {keyword} {city or '全国'} {pages}页 {'(调试模式)' if not headless else ''}",
         }
     )
 

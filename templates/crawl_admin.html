@@ -77,7 +77,14 @@
                     <label>爬取页数</label>
                     <input type="number" id="pages" value="5" min="1" max="50">
                 </div>
-                
+
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" id="debugMode" style="width: auto; margin-right: 8px;">
+                        <span>调试模式（显示浏览器窗口，可观察爬取过程）</span>
+                    </label>
+                </div>
+
                 <button type="submit" class="btn-crawl" id="startBtn">开始采集</button>
                 <button type="button" class="btn-query" id="queryBtn">查询进度</button>
             </form>
@@ -122,7 +129,7 @@
                         data.crawlers.forEach(function(crawler) {
                             var option = document.createElement('option');
                             option.value = crawler.name;
-                            option.textContent = '🕷️ ' + crawler.name;
+                            option.textContent = '🕷️ ' + crawler.name + (crawler.description ? ' - ' + crawler.description : '');
                             select.appendChild(option);
                         });
                         // 触发一次change事件更新badge
@@ -168,27 +175,32 @@
             var keyword = document.getElementById('keyword').value;
             var city = document.getElementById('city').value;
             var pages = document.getElementById('pages').value;
+            var debugMode = document.getElementById('debugMode').checked;
             
             // 显示选择的平台
             var platformName = crawler;
             document.getElementById('crawlerPlatform').textContent = platformName;
             
-            addLog('正在启动 ' + platformName + ' 爬虫...');
-            addLog('关键词: ' + keyword + ', 城市: ' + (city || '全国') + ', 页数: ' + pages);
-            
-            fetch('/myApp/admin/crawl/start/', {
-                method: 'POST',
-                headers: { 
-                    'X-CSRFToken': '{{ csrf_token }}',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    crawler: crawler,
-                    keyword: keyword,
-                    city: city,
-                    pages: parseInt(pages)
+                addLog('正在启动 ' + platformName + ' 爬虫...');
+                addLog('关键词: ' + keyword + ', 城市: ' + (city || '全国') + ', 页数: ' + pages);
+                if (debugMode) {
+                    addLog('调试模式已开启：将显示浏览器窗口');
+                }
+
+                fetch('/myApp/admin/crawl/start/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        crawler: crawler,
+                        keyword: keyword,
+                        city: city,
+                        pages: parseInt(pages),
+                        headless: !debugMode
+                    })
                 })
-            })
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
