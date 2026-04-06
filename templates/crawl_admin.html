@@ -122,7 +122,7 @@
                         data.crawlers.forEach(function(crawler) {
                             var option = document.createElement('option');
                             option.value = crawler.name;
-                            option.textContent = '🕷️ ' + crawler.name + (crawler.description ? ' - ' + crawler.description : '');
+                            option.textContent = '🕷️ ' + crawler.name;
                             select.appendChild(option);
                         });
                         // 触发一次change事件更新badge
