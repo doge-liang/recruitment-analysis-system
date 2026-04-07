@@ -119,6 +119,7 @@ def index(request):
     # 获取统计数据
     total_jobs = JobInfo.objects.count()
     total_users = User.objects.count()
+    total_cities = JobInfo.objects.values("address").distinct().count()
 
     # 学历分布
     edu_dist = (
@@ -159,6 +160,7 @@ def index(request):
     context = {
         "total_jobs": total_jobs,
         "total_users": total_users,
+        "total_cities": total_cities,
         "edu_labels": json.dumps(edu_labels),
         "edu_counts": json.dumps(edu_counts),
         "recent_jobs": recent_jobs,
