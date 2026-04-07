@@ -343,6 +343,25 @@ cd recruitment_system
 python import_jobs.py
 ```
 
+## 导入Excel数据
+
+如果已有 Excel 格式的招聘数据（.xlsx）：
+
+```bash
+cd recruitment_system
+python import_excel.py
+```
+
+脚本会自动查找以下位置的Excel文件：
+1. `招聘数据.xlsx`（项目根目录）
+2. `archive/招聘信息.xlsx`
+
+也可以指定Excel文件路径：
+
+```bash
+python import_excel.py /path/to/your/招聘数据.xlsx
+```
+
 ## 注意事项
 
 ### 环境要求
