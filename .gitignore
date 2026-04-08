@@ -41,10 +41,10 @@ static/js/
 .playwright-mcp/
 
 # Data files and exports (large files)
-archive/
-database_export/
+# archive/
+# database_export/
 runtime/
-*.csv
+# *.csv
 
 # Generated files
-sample_jobs_augmented.csv
+# sample_jobs_augmented.csv
