@@ -97,7 +97,27 @@ docker start recruitment_mysql
 docker exec -it recruitment_mysql mysql -uroot -proot123456 -e "CREATE DATABASE IF NOT EXISTS recruitment_db;"
 ```
 
-### 第七步：修改 settings.py（使用 MySQL）
+### 第七步：导入现成数据（可选，推荐）
+
+项目已包含预采集的招聘数据（约 20000 条），可直接导入使用：
+
+```batch
+# 自动导入（推荐）
+python import_database.py --auto
+
+# 或者先创建表结构再导入
+python manage.py migrate
+python import_database.py
+```
+
+数据文件位置：
+- `database_export/recruitment_db_latest.sql` - SQL 格式（直接导入 MySQL）
+- `database_export/recruitment_db_latest.json` - JSON 格式（Django loaddata）
+- 详细说明见 `database_export/IMPORT_README.md`
+
+**注意**: 如果数据导入失败，可以查看详细导入指南。
+
+### 第八步：修改 settings.py（使用 MySQL）
 
 找到 `settings.py` 中的 `DATABASES` 配置：
 
@@ -121,20 +141,20 @@ import pymysql
 pymysql.install_as_MySQLdb()
 ```
 
-### 第八步：运行迁移
+### 第九步：运行迁移
 
 ```batch
 cd recruitment_system
 python manage.py migrate
 ```
 
-### 第九步：运行服务器
+### 第十步：运行服务器
 
 ```batch
 python manage.py runserver 0.0.0.0:8000
 ```
 
-### 第十步：训练机器学习模型
+### 第十一步：训练机器学习模型
 
 首次部署或更新代码后，必须训练薪资预测和岗位推荐模型：
 
@@ -148,7 +168,7 @@ python salary_predictor.py
 - `ml_model/salary_model.pkl` - 薪资预测模型
 - `ml_model/job_recommender.pkl` - 岗位推荐模型
 
-### 第十一步：访问系统
+### 第十二步：访问系统
 
 浏览器打开：<http://localhost:8000/myApp/login/>
 
@@ -228,6 +248,10 @@ recruitment_system/
 │   ├── TDD_PLAN_A.md
 │   ├── IMPLEMENTATION_REPORT.md
 │   └── PHASE4_DEPLOYMENT_GUIDE.md
+├── database_export/        # 数据库导出文件（SQL/JSON）
+│   ├── IMPORT_README.md
+│   ├── recruitment_db_latest.sql
+│   └── recruitment_db_latest.json
 ├── templates/              # HTML模板
 │   └── crawl_admin.html   # 爬虫管理界面
 └── static/                # 静态文件
@@ -237,6 +261,8 @@ recruitment_system/
 ```
 
 ## 数据采集
+
+**提示**：本项目已包含预采集的招聘数据（约20000条），位于 `database_export/` 目录。如需直接使用数据，请参考上文"第七步：导入现成数据"。以下说明适用于需要自行采集数据的场景。
 
 ### 方式一：使用管理员界面（推荐）
 
