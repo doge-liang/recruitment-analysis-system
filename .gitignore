@@ -36,3 +36,15 @@ static/js/
 # Credentials
 *.env
 .env
+
+# Test artifacts
+.playwright-mcp/
+
+# Data files and exports (large files)
+archive/
+database_export/
+runtime/
+*.csv
+
+# Generated files
+sample_jobs_augmented.csv
