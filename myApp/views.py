@@ -18,6 +18,7 @@ from django.shortcuts import render, get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 
 from .models import JobInfo, History, UserProfile
+from .salary_utils import parse_salary_range as parse_salary, get_salary_avg
 from crawler.registry import list_crawlers, get_crawler_module, is_valid_crawler
 from crawler.run_store import CrawlRunStore
 
@@ -30,25 +31,7 @@ def md5_encrypt(password):
     return hashlib.md5(password.encode()).hexdigest()
 
 
-def parse_salary(salary_str):
-    """
-    解析薪资字符串，返回最低、最高薪资（单位：K）
-    例如: "15K-25K·13薪" -> (15, 25)
-    """
-    if not salary_str:
-        return 0, 0
-    # 移除"薪"等后缀
-    salary_str = re.sub(r"[·\d]*薪", "", salary_str)
-    match = re.search(r"(\d+)[kK]?-(\d+)[kK]?", salary_str)
-    if match:
-        return int(match.group(1)), int(match.group(2))
-    return 0, 0
-
-
-def get_salary_avg(salary_str):
-    """获取薪资平均值（单位：K）"""
-    low, high = parse_salary(salary_str)
-    return (low + high) / 2
+# parse_salary 和 get_salary_avg 已从 salary_utils 导入
 
 
 # ==================== 用户认证 ====================

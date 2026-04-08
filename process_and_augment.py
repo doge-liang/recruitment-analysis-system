@@ -4,7 +4,7 @@
 完整的数据处理流程：
 1. 从 Excel 读取原始数据
 2. 映射字段到数据库模型
-3. 生成增强字段
+3. 生成增强字段（使用统一的薪资工具）
 4. 保存为可直接导入的 CSV
 """
 
@@ -14,6 +14,15 @@ import random
 import pandas as pd
 from datetime import datetime
 from collections import Counter
+
+# 添加项目路径以导入 Django 模块
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "recruitment_system.settings")
+import django
+
+django.setup()
+
+from myApp.salary_utils import convert_excel_salary_to_k, format_salary_range
 
 # 路径配置
 INPUT_EXCEL = "archive/招聘信息.xlsx"
@@ -144,6 +153,10 @@ def process_and_augment_data():
     processed_data = []
 
     for idx, row in df.iterrows():
+        # 转换薪资（Excel中的元 -> K）
+        min_salary_k = convert_excel_salary_to_k(row.get("最低薪资", 10))
+        max_salary_k = convert_excel_salary_to_k(row.get("最高薪资", 20))
+
         # 映射字段
         job_data = {
             # 基础字段（从Excel映射）
@@ -152,8 +165,8 @@ def process_and_augment_data():
             "companyTitle": row.get("company_name", ""),
             "educational": row.get("job_deu", "本科"),
             "workExperience": row.get("job_exp", "经验不限"),
-            # 薪资字段（合并为字符串）
-            "salary": f"{int(row.get('最低薪资', 10))}K-{int(row.get('最高薪资', 20))}K",
+            # 薪资字段（使用统一工具格式化）
+            "salary": format_salary_range(min_salary_k, max_salary_k),
             # 增强字段 - 公司信息
             "companyNature": generate_company_nature(),
             "companyStatus": generate_company_status(),
